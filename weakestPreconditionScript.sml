@@ -1,8 +1,8 @@
-(***********************************************************************)
-(* Proves about Weakest Preconditions for Pancake Statements           *)
-(*                                                                     *)
-(* This file has to be placed in cakeml/pancake/semantics/             *)
-(***********************************************************************)
+(***********************************************************************
+ * Proves about Weakest Preconditions for Pancake Statements           *
+ *                                                                     *
+ * This file has to be placed in cakeml/pancake/semantics/             *
+ ***********************************************************************)
 
 open HolKernel Parse boolLib BasicProvers bossLib
 open pred_setTheory
@@ -16,9 +16,9 @@ fun elim_cases []      = all_tac
   | elim_cases (x::xs) = (Cases_on x >> gvs[] >> elim_cases xs);
 
 
-(***************************************************************)
-(* 1. Definitions and Theorems about Expressions as Predicates *)
-(***************************************************************)
+(***************************************************************
+ * 1. Definitions and Theorems about Expressions as Predicates *
+ ***************************************************************)
 
 Definition will_evaluate_def:
   will_evaluate expr = λs. ∃w. eval s expr = SOME (ValWord w)
@@ -59,10 +59,16 @@ Proof
   >> gvs[]
 QED
 
+Theorem pred_eval_compl_contradict:
+  ∀s expr. s ∈ pred_eval expr ⇒ s ∉ pred_compl expr
+Proof
+  rw[pred_eval_def,pred_compl_def]
+QED
 
-(***********************************************************)
-(* 2. Definitions about Valid Values for Variables         *)
-(***********************************************************)
+
+(***********************************************************
+ * 2. Definitions about Valid Values for Variables         *
+ ***********************************************************)
 
 Definition valid_value_def:
   valid_value v src = λs. case (eval s src) of
@@ -77,9 +83,9 @@ Definition subst_def:
 End
 
 
-(***********************************************************)
-(* 3. Definitions and Theorems about Weakest Preconditions *)
-(***********************************************************)
+(***********************************************************
+ * 3. Definitions and Theorems about Weakest Preconditions *
+ ***********************************************************)
 
 Definition hoare_def:
   hoare P prog Q res ⇔ ∀s. s ∈ P ⇒ let (r, t) = evaluate (prog, s) in
@@ -183,9 +189,9 @@ Proof
 QED
 
 
-(******************************************************)
-(* 4. The Weakest Preconditions of Pancake Statements *)
-(******************************************************)
+(******************************************************
+ * 4. The Weakest Preconditions of Pancake Statements *
+ ******************************************************)
 
 Theorem wp_skip:
   wp Skip Q res = if res = NONE then Q

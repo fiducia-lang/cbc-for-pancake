@@ -1,8 +1,8 @@
-(***********************************************************************)
-(* Proves about Weakest Preconditions for Pancake Statements           *)
-(*                                                                     *)
-(* This file has to be placed in cakeml/pancake/semantics/             *)
-(***********************************************************************)
+(***********************************************************************
+ * Proves about Weakest Preconditions for Pancake Statements           *
+ *                                                                     *
+ * This file has to be placed in cakeml/pancake/semantics/             *
+ ***********************************************************************)
 
 open HolKernel Parse boolLib BasicProvers bossLib
 open pred_setTheory
@@ -16,17 +16,9 @@ fun elim_cases []      = all_tac
   | elim_cases (x::xs) = (Cases_on x >> gvs[] >> elim_cases xs);
 
 
-(***************************************************************)
-(* 1. Rewritten Versions of State Predicates                   *)
-(***************************************************************)
-
-Definition implies_eval_def:
-  implies_eval P e ⇔ P ⊆ pred_eval e ∪ pred_compl e
-End
-
-Definition implies_not_eval_def:
-  implies_not_eval P e ⇔ P ⊆ COMPL (will_evaluate e)
-End
+(***************************************************************
+ * 1. Rewritten Versions of State Predicates                   *
+ ***************************************************************)
 
 Definition with_eval_def:
   with_eval P e = P ∩ pred_eval e
@@ -37,14 +29,15 @@ Definition with_compl_def:
 End
 
 
-(***************************************************************)
-(* 2. Definitions and Theorems about Contracts and Refinements *)
-(***************************************************************)
+(***************************************************************
+ * 2. Definitions and Theorems about Contracts and Refinements *
+ ***************************************************************)
 
 Datatype:
   Contract = HoareC (('a, 'ffi) state -> bool) (('a, 'ffi) state -> bool) ('a result option)
            | SeqC   Contract Contract
            | IfC    ('a panLang$exp) Contract Contract
+           | WhileC ('a panLang$exp) Contract
            | PanC   ('a panLang$prog)
            | DCC
 End
@@ -54,6 +47,7 @@ Definition sat_def:
                    | ((HoareC P Q res), prog)      => hoare P prog Q res
                    | ((SeqC c1 c2), (Seq p1 p2))   => sat c1 p1 ∧ sat c2 p2
                    | ((IfC l c1 c2), (If r p1 p2)) => l = r ∧ sat c1 p1 ∧ sat c2 p2
+                   | ((WhileC l c), (While r p))   => l = r ∧ sat c p
                    | ((PanC l), r)                 => l = r
                    | (DCC, _)                      => T
                    | _                             => F
@@ -76,9 +70,9 @@ Proof
 QED
 
 
-(***************************************************************)
-(* 3. Refinement Rules for Pancake                             *)
-(***************************************************************)
+(***************************************************************
+ * 3. Refinement Rules for Pancake                             *
+ ***************************************************************)
 
 Theorem skip_refinement_rule_pan:
   P ⊆ Q ⇒ refine (HoareC P Q NONE) (PanC Skip)
@@ -86,6 +80,22 @@ Proof
   rw[refine_def,sat_def]
   >> ‘P ⊆ wp Skip Q NONE’ suffices_by (simp[all_preconditions_in_wp])
   >> gvs[wp_skip]
+QED
+
+Theorem assign_refinement_rule_none_pan:
+  P ⊆ valid_value v src ∩ subst v src Q ⇒ refine (HoareC P Q NONE) (PanC (Assign v src))
+Proof
+  rw[refine_def,sat_def]
+  >> ‘P ⊆ wp (Assign v src) Q NONE’ suffices_by (simp[all_preconditions_in_wp])
+  >> gvs[wp_assign]
+QED
+
+Theorem assign_refinement_rule_error_pan:
+  P ⊆ Q DIFF valid_value v src ⇒ refine (HoareC P Q (SOME Error)) (PanC (Assign v src))
+Proof
+  rw[refine_def,sat_def]
+  >> ‘P ⊆ wp (Assign v src) Q (SOME Error)’ suffices_by (simp[all_preconditions_in_wp])
+  >> gvs[wp_assign]
 QED
 
 Theorem seq_refinement_rule_pan:
@@ -137,25 +147,25 @@ Proof
 QED
 
 Theorem if_refinement_rule_success:
-  res ≠ SOME Error ∧ implies_eval P e ⇒ refine (HoareC P Q res)
-                                               (IfC e (HoareC (with_eval P e) Q res)
-                                                      (HoareC (with_compl P e) Q res))
+  res ≠ SOME Error ∧ P ⊆ will_evaluate e ⇒ refine (HoareC P Q res)
+                                                  (IfC e (HoareC (with_eval P e) Q res)
+                                                         (HoareC (with_compl P e) Q res))
 Proof
-  rw[refine_def,sat_def,implies_eval_def]
+  rw[refine_def,sat_def]
   >> elim_cases [‘prog’]
   >> ‘P ⊆ wp (If e p p0) Q res’ suffices_by (simp[all_preconditions_in_wp])
   >> ‘with_eval P e ⊆ wp p Q res ∧ with_compl P e ⊆ wp p0 Q res’ by (gvs[all_preconditions_in_wp])
   >> gvs[wp_if,with_eval_def,with_compl_def]
   >> elim_cases [‘res’]
-  >- ASM_SET_TAC[]
+  >- ASM_SET_TAC[pred_eval_lem]
   >> elim_cases [‘x’]
-  >> ASM_SET_TAC[]
+  >> ASM_SET_TAC[pred_eval_lem]
 QED
 
 Theorem if_refinement_rule_error_guard:
-  implies_not_eval P e ∧ P ⊆ Q ⇒ refine (HoareC P Q (SOME Error)) (IfC e DCC DCC)
+  P ⊆ COMPL (will_evaluate e) ∩ Q ⇒ refine (HoareC P Q (SOME Error)) (IfC e DCC DCC)
 Proof
-  rw[refine_def,sat_def,implies_not_eval_def]
+  rw[refine_def,sat_def]
   >> elim_cases [‘prog’]
   >> ‘P ⊆ wp (If e p p0) Q (SOME Error)’ suffices_by (simp[all_preconditions_in_wp])
   >> gvs[wp_if]
@@ -163,18 +173,26 @@ Proof
 QED
 
 Theorem if_refinement_rule_error_body:
-  implies_eval P e ⇒ refine (HoareC P Q (SOME Error))
-                            (IfC e (HoareC (with_eval P e) Q (SOME Error))
-                                   (HoareC (with_compl P e) Q (SOME Error)))
+  P ⊆ will_evaluate e ⇒ refine (HoareC P Q (SOME Error))
+                               (IfC e (HoareC (with_eval P e) Q (SOME Error))
+                                      (HoareC (with_compl P e) Q (SOME Error)))
 Proof
-  rw[refine_def,sat_def,implies_eval_def]
+  rw[refine_def,sat_def]
   >> elim_cases [‘prog’]
   >> ‘P ⊆ wp (If e p p0) Q (SOME Error)’ suffices_by (simp[all_preconditions_in_wp])
   >> ‘with_eval P e ⊆ wp p Q (SOME Error)’ by (gvs[all_preconditions_in_wp])
   >> ‘with_compl P e ⊆ wp p0 Q (SOME Error)’ by (gvs[all_preconditions_in_wp])
   >> gvs[wp_if,with_eval_def,with_compl_def]
-  >> ASM_SET_TAC[]
+  >> ASM_SET_TAC[pred_eval_lem]
 QED
+
+Theorem while_refinement_rule_pan:
+  refine (WhileC e (PanC prog)) (PanC (While e prog))
+Proof
+  rw[refine_def,sat_def]
+QED
+
+(* TODO WHILE RULES *)
 
 Theorem dcc_refinement_rule_pan:
   refine DCC (PanC prog)
