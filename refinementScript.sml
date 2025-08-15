@@ -74,6 +74,24 @@ QED
  * 3. Refinement Rules for Pancake                             *
  ***************************************************************)
 
+Theorem strengthen_postcondition_refinement_rule:
+  Q' ⊆ Q ⇒ refine (HoareC P Q res) (HoareC P Q' res)
+Proof
+  rw[refine_def,sat_def,hoare_def]
+  >> first_x_assum $ (drule_then assume_tac)
+  >> pairarg_tac
+  >> gvs[]
+  >> ASM_SET_TAC[]
+QED
+
+Theorem weaken_precondition_refinement_rule:
+  P ⊆ P' ⇒ refine (HoareC P Q res) (HoareC P' Q res)
+Proof
+  rw[refine_def,sat_def,hoare_def]
+  >> ‘s ∈ P'’ by (ASM_SET_TAC[])
+  >> gvs[]
+QED
+
 Theorem skip_refinement_rule_pan:
   P ⊆ Q ⇒ refine (HoareC P Q NONE) (PanC Skip)
 Proof
