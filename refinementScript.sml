@@ -4,11 +4,9 @@
  * This file has to be placed in cakeml/pancake/semantics/             *
  ***********************************************************************)
 
-open HolKernel Parse boolLib BasicProvers bossLib
-open pred_setTheory
-open panSemTheory weakestPreconditionTheory
-
-val _ = new_theory "refinement";
+Theory refinement
+Ancestors pred_set panSem weakestPrecondition
+Libs boolLib bossLib
 
 (* Helper-tactic for multiple calls of Cases_on followed by gvs[], *)
 (* i.e. when eliminating non-trivial but contradictory cases       *)
