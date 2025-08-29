@@ -4,3 +4,9 @@
 [submodule "HOL"]
 	path = HOL
 	url = https://github.com/HOL-Theorem-Prover/HOL.git
+[submodule "polyml"]
+	path = polyml
+	url = https://github.com/polyml/polyml.git
+[submodule "z3"]
+	path = z3
+	url = https://github.com/Z3Prover/z3.git
