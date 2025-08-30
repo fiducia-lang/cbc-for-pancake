@@ -1,12 +1,11 @@
+(* COMPLETE TODO *)
+
 (***********************************************************************
- * Proves about Weakest Preconditions for Pancake Statements           *
- *                                                                     *
- * This file has to be placed in cakeml/pancake/semantics/             *
+ * Proofs of Refinement Rules for Pancake Statements                   *
  ***********************************************************************)
 
-Theory refinement
-Ancestors pred_set panSem weakestPrecondition
-Libs boolLib bossLib
+Theory panRefinement
+Ancestors pred_set panPredicate panSem panWeakestPrecondition
 
 (* Helper-tactic for multiple calls of Cases_on followed by gvs[], *)
 (* i.e. when eliminating non-trivial but contradictory cases       *)

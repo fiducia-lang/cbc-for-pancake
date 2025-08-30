@@ -1,203 +1,50 @@
 (***********************************************************************
- * Proves about Weakest Preconditions for Pancake Statements           *
- *                                                                     *
- * This file has to be placed in cakeml/pancake/semantics/             *
+ * Proofs about Weakest Preconditions of Pancake Statements            *
  ***********************************************************************)
 
-Theory weakestPrecondition
-Ancestors panSem pred_set
-Libs boolLib bossLib
+Theory panWeakestPrecondition
+Ancestors panSem panPredicate
 
-(* Helper-tactic for multiple calls of Cases_on followed by gvs[], *)
-(* i.e. when eliminating non-trivial but contradictory cases       *)
-fun elim_cases []      = all_tac
-  | elim_cases (x::xs) = (Cases_on x >> gvs[] >> elim_cases xs);
-
-
-(***************************************************************
- * 1. Definitions and Theorems about Expressions as Predicates *
- ***************************************************************)
-
-Definition will_evaluate_def:
-  will_evaluate expr = λs. ∃w. eval s expr = SOME (ValWord w)
-End
-
-Definition pred_eval_def:
-  pred_eval expr = λs. case (eval s expr) of
-                       | SOME (ValWord w) => w ≠ 0w
-                       | _                => F
-End
-
-Theorem pred_eval_elem:
-  ∀s expr. s ∈ pred_eval expr ⇔ ∃w. eval s expr = SOME (ValWord w) ∧ w ≠ 0w
-Proof
-  simp[pred_eval_def]
-  >> elim_cases [‘eval s expr’, ‘x’, ‘w’]
-QED
-
-Definition pred_compl_def:
-  pred_compl expr = will_evaluate expr ∩ COMPL (pred_eval expr)
-End
-
-Theorem pred_eval_lem:
-  ∀s expr. s ∈ will_evaluate expr ⇔ (s ∈ pred_eval expr ∨ s ∈ pred_compl expr)
-Proof
-  rpt strip_tac
-  >> iff_tac
-  >> rw[will_evaluate_def,pred_eval_def,pred_compl_def]
-  >> elim_cases [‘eval s expr’, ‘x’, ‘w’]
-QED
-
-Theorem pred_compl_elem:
-  ∀s expr. s ∈ pred_compl expr ⇔ ∃w. eval s expr = SOME (ValWord w) ∧ w = 0w
-Proof
-  rpt strip_tac
-  >> iff_tac
-  >> rw[pred_compl_def,pred_eval_def,will_evaluate_def]
-  >> gvs[]
-QED
-
-Theorem pred_eval_compl_contradict:
-  ∀s expr. s ∈ pred_eval expr ⇒ s ∉ pred_compl expr
-Proof
-  rw[pred_eval_def,pred_compl_def]
-QED
-
-
-(***********************************************************
- * 2. Definitions about Valid Values for Variables         *
- ***********************************************************)
-
-Definition valid_value_def:
-  valid_value v src = λs. case (eval s src) of
-                          | NONE       => F
-                          | SOME value => is_valid_value s.locals v value
-End
-
-Definition subst_def:
-  subst v src P = λs. case (eval s src) of
-                      | NONE       => F
-                      | SOME value => (s with locals := s.locals |+ (v,value)) ∈ P
-End
-
-
-(***********************************************************
- * 3. Definitions and Theorems about Weakest Preconditions *
- ***********************************************************)
+fun elim_cases xs = EVERY (map (fn x => Cases_on x >> gvs[]) xs);
 
 Definition hoare_def:
-  hoare P prog Q res ⇔ ∀s. s ∈ P ⇒ let (r, t) = evaluate (prog, s) in
-                                   r = res ∧ t ∈ Q
+  hoare P prog Q ⇔ ∀s. ∃k. P s ⇒ let (r,t) = evaluate (prog,s with clock := k)
+                                 in r ≠ SOME Error ∧
+                                    r ≠ SOME TimeOut ∧
+                                    ∀k'. Q (r,t with clock := k')
 End
 
 Definition wp_def:
-  wp prog Q res = BIGUNION {P | hoare P prog Q res}
+  wp prog Q s ⇔ ∃k. let (r,t) = evaluate (prog,s with clock := k)
+                    in r ≠ SOME Error ∧
+                       r ≠ SOME TimeOut ∧
+                       ∀k'. Q (r,t with clock := k')
 End
 
 Theorem wp_is_weakest_precondition:
-  ∀prog Q res. hoare (wp prog Q res) prog Q res ∧ ∀P. hoare P prog Q res ⇔ P ⊆ (wp prog Q res)
+  ∀prog Q. hoare (wp prog Q) prog Q ∧
+           ∀P. hoare P prog Q ⇔ (∀s. P s ⇒ wp prog Q s)
 Proof
-  SET_TAC[wp_def,hoare_def]
+  metis_tac[wp_def,hoare_def]
 QED
 
 Theorem wp_monotonic:
-  ∀A B prog res. A ⊆ B ⇒ wp prog A res ⊆ wp prog B res
+  ∀A B prog. (∀s. A s ⇒ B s) ⇒ (∀s. wp prog A s ⇒ wp prog B s)
 Proof
-  rw[SUBSET_DEF,wp_def]
-  >> qexists_tac ‘{x}’
-  >> gvs[hoare_def]
+  rw[wp_def]
   >> pairarg_tac
-  >> first_x_assum $ (drule_then assume_tac)
+  >> qexists ‘k’
   >> gvs[]
 QED
 
-Theorem all_preconditions_in_wp:
-  ∀P prog Q res. hoare P prog Q res ⇔ P ⊆ wp prog Q res
-Proof
-  rw[wp_is_weakest_precondition]
-QED
-
-Theorem all_prestates_in_wp:
-  ∀x P prog Q res. hoare {x} prog Q res ⇔ x ∈ wp prog Q res
-Proof
-  SET_TAC[all_preconditions_in_wp]
-QED
-
-Theorem wp_iff_postcondition:
-  ∀s prog Q res. s ∈ wp prog Q res ⇔ ∃t. evaluate (prog, s) = (res, t) ∧ t ∈ Q
-Proof
-  rpt strip_tac
-  >> iff_tac
-  >- (rw[wp_def,hoare_def]
-      >> first_x_assum $ (drule_then assume_tac)
-      >> pairarg_tac
-      >> qexists_tac ‘t’
-      >> gvs[])
-  >- (rw[]
-      >> ‘hoare {s} prog Q res’ by (gvs[hoare_def])
-      >> gvs[all_prestates_in_wp])
-QED
-
-Theorem wp_if_will_evaluate:
-  ∀s res. res ≠ SOME Error ⇒ (s ∈ wp (If e c1 c2) Q res ⇒ s ∈ will_evaluate e)
-Proof
-  rw[]
-  >> ‘∃w. eval s e = SOME (ValWord w)’ suffices_by (rw[will_evaluate_def])
-  >> gvs[wp_def,hoare_def]
-  >> first_x_assum $ (drule_then assume_tac)
-  >> pairarg_tac
-  >> gvs[evaluate_def]
-  >> elim_cases [‘eval s e’, ‘x’, ‘w’]
-QED
-
-Theorem wp_assign_valid_value:
-  ∀s. s ∈ wp (Assign v src) Q NONE ⇒ s ∈ valid_value v src
-Proof
-  rw[valid_value_def,wp_def,hoare_def,evaluate_def]
-  >> first_x_assum $ (drule_then assume_tac)
-  >> pairarg_tac
-  >> elim_cases [‘eval s src’, ‘is_valid_value s.locals v x’]
-QED
-
-Theorem wp_assign_subst:
-  ∀s. s ∈ wp (Assign v src) Q NONE ⇒ s ∈ subst v src Q
-Proof
-  rw[subst_def,wp_def,hoare_def,evaluate_def]
-  >> first_x_assum $ (drule_then assume_tac)
-  >> pairarg_tac
-  >> elim_cases [‘eval s src’, ‘is_valid_value s.locals v x’]
-QED
-
-Theorem wp_error_invalid:
-  ∀s. s ∈ wp (Assign v src) Q (SOME Error) ⇔ s ∈ Q DIFF (valid_value v src)
-Proof
-  strip_tac
-  >> iff_tac
-  >- (rw[valid_value_def,wp_def,hoare_def,evaluate_def]
-      >> first_x_assum $ (drule_then assume_tac)
-      >> pairarg_tac
-      >> gvs[]
-      >> elim_cases [‘eval s src’, ‘is_valid_value s.locals v x’])
-  >- (rw[]
-      >> ‘hoare {s} (Assign v src) Q (SOME Error)’ suffices_by (metis_tac[all_prestates_in_wp])
-      >> gvs[valid_value_def,hoare_def,evaluate_def]
-      >> pairarg_tac
-      >> gvs[]
-      >> elim_cases [‘eval s src’])
-QED
-
-
-(******************************************************
- * 4. The Weakest Preconditions of Pancake Statements *
- ******************************************************)
+(* TODO FROM HERE; REVISIT DEFINITIONS ABOVE *)
 
 Theorem wp_skip:
-  wp Skip Q res = if res = NONE then Q
-                                else ∅
+  wp Skip Q = λs. Q (NONE, s)
 Proof
-  Cases_on ‘res = NONE’
-  >> rw[]
-  >> gvs[EXTENSION,wp_iff_postcondition,evaluate_def]
+  rw[FUN_EQ_THM]
+  >> iff_tac
+  >> rw[wp_def,evaluate_def]
 QED
 
 Theorem wp_seq:
