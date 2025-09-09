@@ -3,29 +3,134 @@
  ***********************************************************************)
 
 Theory panPredicate
-Ancestors panSem
+Ancestors panSem panProps
 
 fun elim_cases xs = EVERY (map (fn x => Cases_on x >> gvs[]) xs);
+
+Definition clkfree_p_def:
+  clkfree_p P ⇔ ∀s k1 k2. P (s with clock := k1) ⇔ P (s with clock := k2)
+End
+
+Definition clkfree_q_def:
+  clkfree_q Q ⇔ ∀r s k1 k2. Q (r,s with clock := k1) ⇔ Q (r,s with clock := k2)
+End
+
+Theorem clkfree_pq:
+  ∀(P : ('a, 'ffi) state -> bool) res : ('a result option). clkfree_p P ⇒
+                                                            clkfree_q (λ(r,t). r = res ∧ P t)
+Proof
+  rw[clkfree_p_def,clkfree_q_def]
+  >> first_x_assum $ (qspecl_then [‘s’, ‘k1’, ‘k2’] assume_tac)
+  >> gvs[]
+QED
+
+Theorem clkfree_qp:
+  ∀Q res. clkfree_q Q ⇒ clkfree_p (λs. Q (res,s))
+Proof
+  rw[clkfree_p_def,clkfree_q_def]
+QED
+
+Theorem clkfree_qqn:
+  ∀Q res. clkfree_q Q ⇒ clkfree_q (λ(r,t). r ≠ res ∧ Q (r,t))
+Proof
+  rw[clkfree_p_def,clkfree_q_def]
+  >> first_x_assum $ (qspecl_then [‘r’, ‘s’, ‘k1’, ‘k2’] assume_tac)
+  >> gvs[]
+QED
+
+Theorem clkfree_p_conj:
+  ∀P R. clkfree_p P ∧ clkfree_p R ⇒ clkfree_p (λs. P s ∧ R s)
+Proof
+  rw[clkfree_p_def]
+  >> rpt (first_x_assum $ (qspecl_then [‘s’, ‘k1’, ‘k2’] assume_tac))
+  >> gvs[]
+QED
+
+Theorem clkfree_p_disj:
+  ∀P R. clkfree_p P ∧ clkfree_p R ⇒ clkfree_p (λs. P s ∨ R s)
+Proof
+  rw[clkfree_p_def]
+  >> rpt (first_x_assum $ (qspecl_then [‘s’, ‘k1’, ‘k2’] assume_tac))
+  >> gvs[]
+QED
+
+Theorem clkfree_p_neg:
+  ∀P. clkfree_p P ⇒ clkfree_p (λs. ¬P s)
+Proof
+  rw[clkfree_p_def]
+QED
+
+Theorem clkfree_q_conj:
+  ∀Q R. clkfree_q Q ∧ clkfree_q R ⇒ clkfree_q (λ(r,t). Q (r,t) ∧ R (r,t))
+Proof
+  rw[clkfree_q_def]
+  >> rpt (first_x_assum $ (qspecl_then [‘r’, ‘s’, ‘k1’, ‘k2’] assume_tac))
+  >> gvs[]
+QED
+
+Theorem clkfree_q_disj:
+  ∀Q R. clkfree_q Q ∧ clkfree_q R ⇒ clkfree_q (λ(r,t). Q (r,t) ∨ R (r,t))
+Proof
+  rw[clkfree_q_def]
+  >> rpt (first_x_assum $ (qspecl_then [‘r’, ‘s’, ‘k1’, ‘k2’] assume_tac))
+  >> gvs[]
+QED
+
+Theorem clkfree_q_neg:
+  ∀Q. clkfree_q Q ⇒ clkfree_q (λ(r,t). ¬Q (r,t))
+Proof
+  rw[clkfree_q_def]
+QED
 
 Definition evaluates_def:
   evaluates e s ⇔ ∃v. eval s e = SOME v
 End
 
+Theorem clkfree_evaluates:
+  ∀e. clkfree_p (λs. evaluates e s)
+Proof
+  rw[clkfree_p_def,evaluates_def,eval_upd_clock_eq]
+QED
+
 Definition evaluates_to_def:
   evaluates_to e v s ⇔ eval s e = SOME v
 End
+
+Theorem clkfree_evaluates_to:
+  ∀e v. clkfree_p (λs. evaluates_to e v s)
+Proof
+  rw[clkfree_p_def,evaluates_to_def,eval_upd_clock_eq]
+QED
 
 Definition evaluates_to_word_def:
   evaluates_to_word e s ⇔ ∃w. eval s e = SOME (ValWord w)
 End
 
+Theorem clkfree_evaluates_to_word:
+  ∀e. clkfree_p (λs. evaluates_to_word e s)
+Proof
+  rw[clkfree_p_def,evaluates_to_word_def,eval_upd_clock_eq]
+QED
+
 Definition evaluates_to_true_def:
   evaluates_to_true e s ⇔ ∃w. eval s e = SOME (ValWord w) ∧ w ≠ 0w
 End
 
+Theorem clkfree_evaluates_to_true:
+  ∀e. clkfree_p (λs. evaluates_to_true e s)
+Proof
+  rw[clkfree_p_def,evaluates_to_true_def,eval_upd_clock_eq]
+QED
+
 Definition evaluates_to_false_def:
   evaluates_to_false e s ⇔ ∃w. eval s e = SOME (ValWord w) ∧ w = 0w
 End
+
+Theorem clkfree_evaluates_to_false:
+  ∀e. clkfree_p (λs. evaluates_to_false e s)
+Proof
+  rw[clkfree_p_def,evaluates_to_false_def,eval_upd_clock_eq]
+QED
 
 Theorem evaluates_to_word_lem:
   ∀e s. evaluates_to_word e s ⇒ evaluates_to_true e s ∨ evaluates_to_false e s
