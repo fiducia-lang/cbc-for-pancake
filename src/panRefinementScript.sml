@@ -1,53 +1,39 @@
-(* COMPLETE TODO *)
-
 (***********************************************************************
  * Proofs of Refinement Rules for Pancake Statements                   *
  ***********************************************************************)
 
 Theory panRefinement
-Ancestors pred_set panPredicate panSem panWeakestPrecondition
+Ancestors panPredicate panSem panProps panWeakestPrecondition
 
-(* Helper-tactic for multiple calls of Cases_on followed by gvs[], *)
-(* i.e. when eliminating non-trivial but contradictory cases       *)
-fun elim_cases []      = all_tac
-  | elim_cases (x::xs) = (Cases_on x >> gvs[] >> elim_cases xs);
+fun elim_cases xs = EVERY (map (fn x => Cases_on x >> gvs[]) xs);
 
-
-(***************************************************************
- * 1. Rewritten Versions of State Predicates                   *
- ***************************************************************)
-
-Definition with_eval_def:
-  with_eval P e = P ∩ pred_eval e
-End
-
-Definition with_compl_def:
-  with_compl P e = P ∩ pred_compl e
-End
+Theorem pq_monotonic:
+  ∀(A : ('a, 'ffi) state -> bool) B (res : 'a result option).
+   (∀s. A s ⇒ B s) ⇒ (∀s. (λ(r,t). r = res ∧ A t) s ⇒ (λ(r,t). r = res ∧ B t) s)
+Proof
+  rw[]
+  >> pairarg_tac
+  >> gvs[]
+QED
 
 
-(***************************************************************
- * 2. Definitions and Theorems about Contracts and Refinements *
- ***************************************************************)
 
 Datatype:
-  Contract = HoareC (('a, 'ffi) state -> bool) (('a, 'ffi) state -> bool) ('a result option)
-           | SeqC   Contract Contract
-           | IfC    ('a panLang$exp) Contract Contract
-           | WhileC ('a panLang$exp) Contract
-           | PanC   ('a panLang$prog)
+  Contract = HoareC    (('a, 'ffi) state -> bool) (('a result option # ('a, 'ffi) state) -> bool)
+           | SeqC      Contract Contract
+           | IfC       ('a panLang$exp) Contract Contract
+           | PanC      ('a panLang$prog)
            | DCC
 End
 
 Definition sat_def:
   sat contr prog = case (contr, prog) of
-                   | ((HoareC P Q res), prog)      => hoare P prog Q res
-                   | ((SeqC c1 c2), (Seq p1 p2))   => sat c1 p1 ∧ sat c2 p2
-                   | ((IfC l c1 c2), (If r p1 p2)) => l = r ∧ sat c1 p1 ∧ sat c2 p2
-                   | ((WhileC l c), (While r p))   => l = r ∧ sat c p
-                   | ((PanC l), r)                 => l = r
-                   | (DCC, _)                      => T
-                   | _                             => F
+                   | ((HoareC P Q), prog)            => hoare P prog Q
+                   | ((SeqC c1 c2), (Seq p1 p2))     => sat c1 p1 ∧ sat c2 p2
+                   | ((IfC l c1 c2), (If r p1 p2))   => l = r ∧ sat c1 p1 ∧ sat c2 p2
+                   | ((PanC l), r)                   => l = r
+                   | (DCC, _)                        => T
+                   | _                               => F
 End
 
 Definition refine_def:
@@ -66,51 +52,79 @@ Proof
   rw[refine_def]
 QED
 
-
-(***************************************************************
- * 3. Refinement Rules for Pancake                             *
- ***************************************************************)
-
 Theorem strengthen_postcondition_refinement_rule:
-  Q' ⊆ Q ⇒ refine (HoareC P Q res) (HoareC P Q' res)
+  clkfree_q Q ∧ (∀s. Q' s ⇒ Q s) ⇒ refine (HoareC P Q) (HoareC P Q')
 Proof
-  rw[refine_def,sat_def,hoare_def]
-  >> first_x_assum $ (drule_then assume_tac)
+  rw[refine_def,sat_def,hoare_def,clkfree_q_def]
+  >> first_x_assum $ (qspec_then ‘s’ assume_tac)
+  >> gvs[]
+  >> qexists ‘k’
   >> pairarg_tac
   >> gvs[]
-  >> ASM_SET_TAC[]
 QED
 
 Theorem weaken_precondition_refinement_rule:
-  P ⊆ P' ⇒ refine (HoareC P Q res) (HoareC P' Q res)
+  clkfree_p P ∧ (∀s. P s ⇒ P' s) ⇒ refine (HoareC P Q) (HoareC P' Q)
 Proof
-  rw[refine_def,sat_def,hoare_def]
-  >> ‘s ∈ P'’ by (ASM_SET_TAC[])
+  rw[refine_def,sat_def,hoare_def,clkfree_p_def]
+  >> first_x_assum $ (qspec_then ‘s’ assume_tac)
+  >> gvs[]
+  >> qexists ‘k’
   >> gvs[]
 QED
 
-Theorem skip_refinement_rule_pan:
-  P ⊆ Q ⇒ refine (HoareC P Q NONE) (PanC Skip)
+Theorem skip_refinement_rule:
+  clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ Q (NONE,s)) ⇒ refine (HoareC P Q) (PanC Skip)
 Proof
   rw[refine_def,sat_def]
-  >> ‘P ⊆ wp Skip Q NONE’ suffices_by (simp[all_preconditions_in_wp])
+  >> qspecl_then [‘P’, ‘Skip’, ‘Q’] assume_tac wp_is_weakest_precondition
   >> gvs[wp_skip]
 QED
 
-Theorem assign_refinement_rule_none_pan:
-  P ⊆ valid_value v src ∩ subst v src Q ⇒ refine (HoareC P Q NONE) (PanC (Assign v src))
+Theorem assign_refinement_rule:
+  clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ valid_value k v src s ∧
+                                         subst k v src (λs. Q (NONE,s)) s) ⇒
+  refine (HoareC P Q) (PanC (Assign k v src))
 Proof
   rw[refine_def,sat_def]
-  >> ‘P ⊆ wp (Assign v src) Q NONE’ suffices_by (simp[all_preconditions_in_wp])
+  >> qspecl_then [‘P’, ‘Assign k v src’, ‘Q’] assume_tac wp_is_weakest_precondition
   >> gvs[wp_assign]
 QED
 
-Theorem assign_refinement_rule_error_pan:
-  P ⊆ Q DIFF valid_value v src ⇒ refine (HoareC P Q (SOME Error)) (PanC (Assign v src))
+Theorem store_refinement_rule:
+  clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
+                                                    evaluates_to src val s ∧
+                                                    addr_in_mem addr val s ∧
+                                                    mem_subst addr val (λs. Q (NONE,s)) s) ⇒
+  refine (HoareC P Q) (PanC (Store dest src))
 Proof
   rw[refine_def,sat_def]
-  >> ‘P ⊆ wp (Assign v src) Q (SOME Error)’ suffices_by (simp[all_preconditions_in_wp])
-  >> gvs[wp_assign]
+  >> qspecl_then [‘P’, ‘Store dest src’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> gvs[wp_store]
+QED
+
+Theorem store32_refinement_rule:
+  clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
+                                                    evaluates_to src (ValWord val) s ∧
+                                                    addr_in_mem_32 addr val s ∧
+                                                    mem_subst_32 addr val (λs. Q (NONE,s)) s) ⇒
+  refine (HoareC P Q) (PanC (Store32 dest src))
+Proof
+  rw[refine_def,sat_def]
+  >> qspecl_then [‘P’, ‘Store32 dest src’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> gvs[wp_store32]
+QED
+
+Theorem storebyte_refinement_rule:
+  clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
+                                                    evaluates_to src (ValWord val) s ∧
+                                                    addr_in_mem_byte addr val s ∧
+                                                    mem_subst_byte addr val (λs. Q (NONE,s)) s) ⇒
+  refine (HoareC P Q) (PanC (StoreByte dest src))
+Proof
+  rw[refine_def,sat_def]
+  >> qspecl_then [‘P’, ‘StoreByte dest src’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> gvs[wp_storebyte]
 QED
 
 Theorem seq_refinement_rule_pan:
@@ -119,100 +133,66 @@ Proof
   rw[refine_def,sat_def]
 QED
 
-Theorem seq_refinement_rule_none:
-  refine (HoareC P Q NONE) (SeqC (HoareC P M NONE) (HoareC M Q NONE))
+Theorem seq_refinement_rule_fst:
+  clkfree_p P ∧ clkfree_q Q ⇒
+  refine (HoareC P Q) (SeqC (HoareC P (λ(r,t). r ≠ NONE ∧ Q (r,t))) DCC)
 Proof
   rw[refine_def,sat_def]
   >> elim_cases [‘prog’]
-  >> ‘P ⊆ wp (Seq p p0) Q NONE’ suffices_by (simp[all_preconditions_in_wp])
-  >> ‘P ⊆ wp p M NONE ∧ M ⊆ wp p0 Q NONE’ by (gvs[all_preconditions_in_wp])
-  >> ‘wp p M NONE ⊆ wp p (wp p0 Q NONE) NONE’ by (gvs[wp_monotonic])
-  >> ‘P ⊆ wp p (wp p0 Q NONE) NONE’ by (ASM_SET_TAC[])
+  >> qspecl_then [‘P’, ‘p’, ‘(λ(r,t). r ≠ NONE ∧ Q (r,t))’] assume_tac wp_is_weakest_precondition
+  >> qspecl_then [‘P’, ‘Seq p p0’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> qspecl_then [‘Q’, ‘NONE’] assume_tac clkfree_qqn
   >> gvs[wp_seq]
 QED
 
-Theorem seq_refinement_rule_some_left:
-  res ≠ NONE ⇒ refine (HoareC P Q res) (SeqC (HoareC P Q res) DCC)
+Theorem seq_refinement_rule_snd:
+  clkfree_p P ∧ clkfree_q Q ∧ clkfree_p M ⇒
+  refine (HoareC P Q) (SeqC (HoareC P (λ(r,t). r = NONE ∧ M t)) (HoareC M Q))
 Proof
   rw[refine_def,sat_def]
   >> elim_cases [‘prog’]
-  >> ‘P ⊆ wp (Seq p p0) Q res’ suffices_by (simp[all_preconditions_in_wp])
-  >> ‘P ⊆ wp p Q res’ by (gvs[all_preconditions_in_wp])
+  >> qspecl_then [‘P’, ‘p’, ‘(λ(r,t). r = NONE ∧ M t)’] assume_tac wp_is_weakest_precondition
+  >> qspecl_then [‘M’, ‘p0’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> qspecl_then [‘P’, ‘Seq p p0’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> ‘clkfree_p (wp p0 Q)’ by (metis_tac[wp_clkfree])
+  >> qspecl_then [‘wp p0 Q’, ‘NONE’] assume_tac clkfree_pq
+  >> qspecl_then [‘M’, ‘NONE’] assume_tac clkfree_pq
+  >> qspecl_then [‘M’, ‘wp p0 Q’, ‘NONE’] assume_tac pq_monotonic
+  >> qspecl_then [‘λ(r,t). r = NONE ∧ M t’, ‘λ(r,t). r = NONE ∧ wp p0 Q t’, ‘p’]
+                 assume_tac wp_monotonic
   >> gvs[wp_seq]
-  >> ASM_SET_TAC[]
-QED
-
-Theorem seq_refinement_rule_some_right:
-  res ≠ NONE ⇒ refine (HoareC P Q res) (SeqC (HoareC P M NONE) (HoareC M Q res))
-Proof
-  rw[refine_def,sat_def]
-  >> elim_cases [‘prog’]
-  >> ‘P ⊆ wp (Seq p p0) Q res’ suffices_by (simp[all_preconditions_in_wp])
-  >> ‘P ⊆ wp p M NONE ∧ M ⊆ wp p0 Q res’ by (gvs[all_preconditions_in_wp])
-  >> ‘wp p M NONE ⊆ wp p (wp p0 Q res) NONE’ by (gvs[wp_monotonic])
-  >> ‘P ⊆ wp p (wp p0 Q res) NONE’ by (ASM_SET_TAC[])
-  >> gvs[wp_seq]
-  >> ASM_SET_TAC[]
 QED
 
 Theorem if_refinement_rule_pan:
-  refine (IfC e (PanC p1) (PanC p2)) (PanC (If e p1 p2))
+  refine (IfC e (PanC l) (PanC r)) (PanC (If e l r))
 Proof
   rw[refine_def,sat_def]
 QED
 
-Theorem if_refinement_rule_success:
-  res ≠ SOME Error ∧ P ⊆ will_evaluate e ⇒ refine (HoareC P Q res)
-                                                  (IfC e (HoareC (with_eval P e) Q res)
-                                                         (HoareC (with_compl P e) Q res))
+Theorem if_refinement_rule:
+  clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ evaluates_to_word e s) ⇒
+  refine (HoareC P Q) (IfC e (HoareC (λs. P s ∧ evaluates_to_true  e s) Q)
+                             (HoareC (λs. P s ∧ evaluates_to_false e s) Q))
 Proof
   rw[refine_def,sat_def]
   >> elim_cases [‘prog’]
-  >> ‘P ⊆ wp (If e p p0) Q res’ suffices_by (simp[all_preconditions_in_wp])
-  >> ‘with_eval P e ⊆ wp p Q res ∧ with_compl P e ⊆ wp p0 Q res’ by (gvs[all_preconditions_in_wp])
-  >> gvs[wp_if,with_eval_def,with_compl_def]
-  >> elim_cases [‘res’]
-  >- ASM_SET_TAC[pred_eval_lem]
-  >> elim_cases [‘x’]
-  >> ASM_SET_TAC[pred_eval_lem]
-QED
-
-Theorem if_refinement_rule_error_guard:
-  P ⊆ COMPL (will_evaluate e) ∩ Q ⇒ refine (HoareC P Q (SOME Error)) (IfC e DCC DCC)
-Proof
-  rw[refine_def,sat_def]
-  >> elim_cases [‘prog’]
-  >> ‘P ⊆ wp (If e p p0) Q (SOME Error)’ suffices_by (simp[all_preconditions_in_wp])
+  >> qspecl_then [‘λs. P s ∧ evaluates_to_true e s’, ‘p’, ‘Q’]
+                 assume_tac wp_is_weakest_precondition
+  >> qspecl_then [‘λs. P s ∧ evaluates_to_false e s’, ‘p0’, ‘Q’]
+                 assume_tac wp_is_weakest_precondition
+  >> qspecl_then [‘P’, ‘If e p p0’, ‘Q’]
+                 assume_tac wp_is_weakest_precondition
+  >> ‘clkfree_p (λs. P s ∧ evaluates_to_true e s)’ by
+     (metis_tac[clkfree_p_conj,clkfree_evaluates_to_true])
+  >> ‘clkfree_p (λs. P s ∧ evaluates_to_false e s)’ by
+     (metis_tac[clkfree_p_conj,clkfree_evaluates_to_false])
   >> gvs[wp_if]
-  >> ASM_SET_TAC[]
 QED
 
-Theorem if_refinement_rule_error_body:
-  P ⊆ will_evaluate e ⇒ refine (HoareC P Q (SOME Error))
-                               (IfC e (HoareC (with_eval P e) Q (SOME Error))
-                                      (HoareC (with_compl P e) Q (SOME Error)))
-Proof
-  rw[refine_def,sat_def]
-  >> elim_cases [‘prog’]
-  >> ‘P ⊆ wp (If e p p0) Q (SOME Error)’ suffices_by (simp[all_preconditions_in_wp])
-  >> ‘with_eval P e ⊆ wp p Q (SOME Error)’ by (gvs[all_preconditions_in_wp])
-  >> ‘with_compl P e ⊆ wp p0 Q (SOME Error)’ by (gvs[all_preconditions_in_wp])
-  >> gvs[wp_if,with_eval_def,with_compl_def]
-  >> ASM_SET_TAC[pred_eval_lem]
-QED
 
-Theorem while_refinement_rule_pan:
-  refine (WhileC e (PanC prog)) (PanC (While e prog))
-Proof
-  rw[refine_def,sat_def]
-QED
 
-(* TODO WHILE RULES *)
-
-Theorem dcc_refinement_rule_pan:
+Theorem dcc_refinement_rule:
   refine DCC (PanC prog)
 Proof
   rw[refine_def,sat_def]
 QED
-
-val _ = export_theory();
