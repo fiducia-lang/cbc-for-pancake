@@ -16,12 +16,29 @@ Proof
   >> gvs[]
 QED
 
+Definition is_variant_def:
+  is_variant (i : ('a, 'ffi) state -> bool) (v : ('a, 'ffi) state -> num) p ⇔
+             (∀s. i s ⇒ v (SND (evaluate (p,s))) < v s) ∧
+             (∀s k1 k2.  v (s with clock := k1) = v (s with clock := k2))
+End
 
+Definition valid_early_exit_def:
+  valid_early_exit (r,t) Q ⇔ case r of
+                             | SOME Break           => Q (NONE, t)
+                             | SOME (Return _)      => Q (r,t)
+                             | SOME (Exception _ _) => Q (r,t)
+                             | SOME (FinalFFI _)    => Q (r,t)
+                             | _                    => T
+End
 
 Datatype:
   Contract = HoareC    (('a, 'ffi) state -> bool) (('a result option # ('a, 'ffi) state) -> bool)
            | SeqC      Contract Contract
            | IfC       ('a panLang$exp) Contract Contract
+           | WhileC    ('a panLang$exp)
+                       (('a, 'ffi) state -> bool)
+                       (('a, 'ffi) state -> num)
+                       Contract
            | PanC      ('a panLang$prog)
            | DCC
 End
@@ -31,6 +48,9 @@ Definition sat_def:
                    | ((HoareC P Q), prog)            => hoare P prog Q
                    | ((SeqC c1 c2), (Seq p1 p2))     => sat c1 p1 ∧ sat c2 p2
                    | ((IfC l c1 c2), (If r p1 p2))   => l = r ∧ sat c1 p1 ∧ sat c2 p2
+                   | ((WhileC l i v c), (While r p)) => l = r ∧
+                                                        sat c p ∧
+                                                        is_variant i v p
                    | ((PanC l), r)                   => l = r
                    | (DCC, _)                        => T
                    | _                               => F
@@ -189,7 +209,82 @@ Proof
   >> gvs[wp_if]
 QED
 
+Theorem while_refinement_rule_pan:
+  is_variant i v p ⇒
+  refine (WhileC e i v (PanC p)) (PanC (While e p))
+Proof
+  rw[refine_def,sat_def]
+QED
 
+Theorem while_refinement_rule:
+  ∀P Q e i v.
+  clkfree_p P ∧
+  clkfree_q Q ∧
+  clkfree_p i ∧
+  (∀s. P s ⇒ i s) ∧
+  (∀s. i s ⇒ evaluates_to_word e s) ∧
+  (∀s r. r ≠ SOME Error ∧ r ≠ SOME TimeOut ∧ i s ∧ evaluates_to_false e s ⇒ Q (r,s)) ⇒
+  refine (HoareC P Q)
+         (WhileC e i v (HoareC (λs. i s ∧ evaluates_to_true e s) (λ(r,t). i t ∧ valid_early_exit (r,t) Q)))
+Proof
+  rw[refine_def,sat_def,hoare_def]
+  >> elim_cases [‘prog’]
+  >> last_x_assum $ drule_then assume_tac
+  >> qpat_x_assum ‘P s’ (K ALL_TAC)
+  >> measureInduct_on ‘v s’
+  >> rw[Once evaluate_def]
+  >> last_x_assum $ drule_then assume_tac
+  >> fs[evaluates_to_word_def,eval_upd_clock_eq]
+  >> elim_cases [‘w = 0w’]
+  >- (first_x_assum $ qspecl_then [‘s’, ‘NONE’] assume_tac
+      >> qexists ‘s.clock’
+      >> gvs[evaluates_to_false_def,state_clock_idem])
+  >> gvs[dec_clock_def,is_variant_def]
+  >> ‘evaluates_to_true e s’ by (gvs[evaluates_to_true_def])
+  >> last_x_assum $ drule_then assume_tac
+  >> gvs[]
+  >> rpt (pairarg_tac >> gvs[])
+  >> gvs[clkfree_p_def]
+  >> last_x_assum $ assume_tac
+  >> last_x_assum $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
+  >> gvs[state_clock_idem]
+  >> qpat_x_assum ‘∀s. i s ⇒ _’ $ qspec_then ‘s with clock := k’ assume_tac
+  >> gvs[]
+  >> ‘v (s with clock := s.clock) = v (s with clock := k)’ by (gvs[])
+  >> ‘v t < v s’ by (metis_tac[state_clock_idem])
+  >> first_x_assum $ drule_then assume_tac
+  >> gvs[]
+  >> pairarg_tac
+  >> gvs[]
+  >> qspecl_then [‘t with clock := k'’, ‘t'’, ‘r'’, ‘While e p’] assume_tac
+                 (GEN_ALL evaluate_min_clock)
+  >> qspecl_then [‘s with clock := k’, ‘t’, ‘r’, ‘p’] assume_tac
+                 (GEN_ALL evaluate_min_clock)
+  >> gvs[]
+  >> qspecl_then [‘p’, ‘s with clock := k'''’, ‘r’, ‘t with clock := 0’, ‘k''’] assume_tac
+                 evaluate_add_clock_eq
+  >> gvs[]
+  >> qexists ‘k'' + k''' + 1’
+  >> rpt (pairarg_tac >> gvs[])
+  >> elim_cases [‘r’]
+  >- (gvs[clkfree_q_def]
+      >> last_x_assum $ qspecl_then [‘r'’, ‘t'’, ‘t'.clock’, ‘0’] assume_tac
+      >> gvs[state_clock_idem])
+  >> elim_cases [‘x’]
+  >- (gvs[valid_early_exit_def,clkfree_q_def]
+      >> last_x_assum $ qspecl_then [‘NONE’, ‘t’, ‘t.clock’, ‘k''’] assume_tac
+      >> gvs[state_clock_idem])
+  >- (gvs[clkfree_q_def]
+      >> last_x_assum $ qspecl_then [‘r'’, ‘t'’, ‘t'.clock’, ‘0’] assume_tac
+      >> gvs[state_clock_idem])
+  >> gvs[valid_early_exit_def,clkfree_q_def]
+  >- (last_x_assum $ qspecl_then [‘SOME (Return v')’, ‘t’, ‘t.clock’, ‘k''’] assume_tac
+      >> gvs[state_clock_idem])
+  >- (last_x_assum $ qspecl_then [‘SOME (Exception m v')’, ‘t’, ‘t.clock’, ‘k''’] assume_tac
+      >> gvs[state_clock_idem])
+  >- (last_x_assum $ qspecl_then [‘SOME (FinalFFI f)’, ‘t’, ‘t.clock’, ‘k''’] assume_tac
+      >> gvs[state_clock_idem])
+QED
 
 Theorem dcc_refinement_rule:
   refine DCC (PanC prog)
