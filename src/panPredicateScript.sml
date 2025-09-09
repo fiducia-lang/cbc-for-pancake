@@ -160,10 +160,9 @@ Definition subst_def:
                                    | Global => P (s with globals := s.globals |+ (v,value))
 End
 
-Definition reset_local_subst_def:
-  reset_local_subst v s Q (r,t) ⇔ Q (r,t with locals := res_var t.locals (v,FLOOKUP s.locals v))
+Definition reset_subst_def:
+  reset_subst v s Q (r,t) ⇔ Q (r,t with locals := res_var t.locals (v,FLOOKUP s.locals v))
 End
-
 
 Definition has_eshape_def:
   has_eshape eid sh s ⇔ FLOOKUP s.eshapes eid = SOME sh
