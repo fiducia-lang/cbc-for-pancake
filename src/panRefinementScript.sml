@@ -22,15 +22,6 @@ Definition is_variant_def:
              (∀s k1 k2.  v (s with clock := k1) = v (s with clock := k2))
 End
 
-Definition valid_early_exit_def:
-  valid_early_exit (r,t) Q ⇔ case r of
-                             | SOME Break           => Q (NONE, t)
-                             | SOME (Return _)      => Q (r,t)
-                             | SOME (Exception _ _) => Q (r,t)
-                             | SOME (FinalFFI _)    => Q (r,t)
-                             | _                    => T
-End
-
 Datatype:
   Contract = HoareC    (('a, 'ffi) state -> bool) (('a result option # ('a, 'ffi) state) -> bool)
            | SeqC      Contract Contract
@@ -217,46 +208,57 @@ Theorem while_refinement_rule_pan:
   is_variant i v p ⇒
   refine (WhileC e i v (PanC p)) (PanC (While e p))
 Proof
-  rw[refine_def,sat_def]
+  rw[refine_def]
 QED
 
+Definition while_body_pre_def:
+  while_body_pre i e = λs. i s ∧ evaluates_to_true e s
+End
+
+Definition while_body_post_def:
+  while_body_post i QB QR QE QF = λ(r,t). i t ∧ case r of
+                                                | SOME Break             => QB t
+                                                | SOME (Return v)        => QR (t,v)
+                                                | SOME (Exception eid e) => QE (t,eid,e)
+                                                | SOME (FinalFFI f)      => QF (t,f)
+                                                | _                      => T
+End
+
 Theorem while_refinement_rule:
-  ∀P Q e i v.
-  clkfree_p P ∧
-  clkfree_q Q ∧
-  clkfree_p i ∧
+  ∀P Q QB QR QE QF e i v.
+  clkfree_p P ∧ clkfree_q Q ∧ clkfree_p i ∧
   (∀s. P s ⇒ i s) ∧
   (∀s. i s ⇒ evaluates_to_word e s) ∧
-  (∀s r. r ≠ SOME Error ∧ r ≠ SOME TimeOut ∧ i s ∧ evaluates_to_false e s ⇒ Q (r,s)) ⇒
+  (∀s. i s ∧ evaluates_to_false e s ⇒ Q (NONE,s)) ∧
+  (∀t.       QB t         ⇒ Q (NONE,                  t)) ∧
+  (∀t v.     QR (t,v)     ⇒ Q (SOME (Return v),       t)) ∧
+  (∀t eid v. QE (t,eid,v) ⇒ Q (SOME (Exception eid v),t)) ∧
+  (∀t f.     QF (t,f)     ⇒ Q (SOME (FinalFFI f),     t)) ⇒
   refine (HoareC P Q)
-         (WhileC e i v (HoareC (λs. i s ∧ evaluates_to_true e s) (λ(r,t). i t ∧ valid_early_exit (r,t) Q)))
+         (WhileC e i v (HoareC (while_body_pre i e) (while_body_post i QB QR QE QF)))
 Proof
-  rw[refine_def,sat_def,hoare_def]
-  >> elim_cases [‘prog’]
+  rw[refine_def,hoare_def,while_body_pre_def,while_body_post_def]
   >> last_x_assum $ drule_then assume_tac
-  >> qpat_x_assum ‘P s’ (K ALL_TAC)
+  >> qpat_x_assum ‘P s’ $ K all_tac
   >> measureInduct_on ‘v s’
   >> rw[Once evaluate_def]
   >> last_x_assum $ drule_then assume_tac
-  >> fs[evaluates_to_word_def,eval_upd_clock_eq]
+  >> gvs[evaluates_to_word_def,eval_upd_clock_eq]
   >> elim_cases [‘w = 0w’]
-  >- (first_x_assum $ qspecl_then [‘s’, ‘NONE’] assume_tac
+  >- (last_x_assum $ qspec_then ‘s’ assume_tac
       >> qexists ‘s.clock’
       >> gvs[evaluates_to_false_def,state_clock_idem])
   >> gvs[dec_clock_def,is_variant_def]
-  >> ‘evaluates_to_true e s’ by (gvs[evaluates_to_true_def])
-  >> last_x_assum $ drule_then assume_tac
-  >> gvs[]
-  >> rpt (pairarg_tac >> gvs[])
+  >> qpat_x_assum ‘∀s. i s ∧ evaluates_to_true e s ⇒ _’ $ qspec_then ‘s’ assume_tac
+  >> gvs[evaluates_to_true_def]
+  >> pairarg_tac
   >> gvs[clkfree_p_def]
-  >> last_x_assum $ assume_tac
-  >> last_x_assum $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
+  >> qpat_x_assum ‘∀s k1 k2. i _ ⇔ i _’ $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
   >> gvs[state_clock_idem]
-  >> qpat_x_assum ‘∀s. i s ⇒ _’ $ qspec_then ‘s with clock := k’ assume_tac
-  >> gvs[]
-  >> ‘v (s with clock := s.clock) = v (s with clock := k)’ by (gvs[])
-  >> ‘v t < v s’ by (metis_tac[state_clock_idem])
-  >> first_x_assum $ drule_then assume_tac
+  >> qpat_x_assum ‘∀s. i s ⇒ v _ < v _’ $ qspec_then ‘s with clock := k’ assume_tac
+  >> qpat_x_assum ‘∀s k1 k2. v _ = v _’ $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
+  >> gvs[state_clock_idem]
+  >> first_x_assum $ qspec_then ‘t’ assume_tac
   >> gvs[]
   >> pairarg_tac
   >> gvs[]
@@ -275,19 +277,13 @@ Proof
       >> last_x_assum $ qspecl_then [‘r'’, ‘t'’, ‘t'.clock’, ‘0’] assume_tac
       >> gvs[state_clock_idem])
   >> elim_cases [‘x’]
-  >- (gvs[valid_early_exit_def,clkfree_q_def]
-      >> last_x_assum $ qspecl_then [‘NONE’, ‘t’, ‘t.clock’, ‘k''’] assume_tac
-      >> gvs[state_clock_idem])
-  >- (gvs[clkfree_q_def]
-      >> last_x_assum $ qspecl_then [‘r'’, ‘t'’, ‘t'.clock’, ‘0’] assume_tac
-      >> gvs[state_clock_idem])
-  >> gvs[valid_early_exit_def,clkfree_q_def]
-  >- (last_x_assum $ qspecl_then [‘SOME (Return v')’, ‘t’, ‘t.clock’, ‘k''’] assume_tac
-      >> gvs[state_clock_idem])
-  >- (last_x_assum $ qspecl_then [‘SOME (Exception m v')’, ‘t’, ‘t.clock’, ‘k''’] assume_tac
-      >> gvs[state_clock_idem])
-  >- (last_x_assum $ qspecl_then [‘SOME (FinalFFI f)’, ‘t’, ‘t.clock’, ‘k''’] assume_tac
-      >> gvs[state_clock_idem])
+  >> gvs[clkfree_q_def]
+  >| [(last_x_assum $ qspecl_then [‘NONE’, ‘t’, ‘t.clock’, ‘k''’] assume_tac),
+      (last_x_assum $ qspecl_then [‘r'’, ‘t'’, ‘t'.clock’, ‘0’] assume_tac),
+      (last_x_assum $ qspecl_then [‘SOME (Return v')’, ‘t’, ‘t.clock’, ‘k''’] assume_tac),
+      (last_x_assum $ qspecl_then [‘SOME (Exception m v')’, ‘t’, ‘t.clock’, ‘k''’] assume_tac),
+      (last_x_assum $ qspecl_then [‘SOME (FinalFFI f)’, ‘t’, ‘t.clock’, ‘k''’] assume_tac)]
+  >> gvs[state_clock_idem]
 QED
 
 Theorem dcc_refinement_rule:
