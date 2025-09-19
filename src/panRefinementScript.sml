@@ -43,21 +43,26 @@ Datatype:
            | DCC
 End
 
-Definition sat_def:
-  sat contr prog = case (contr, prog) of
-                   | ((HoareC P Q), prog)            => hoare P prog Q
-                   | ((SeqC c1 c2), (Seq p1 p2))     => sat c1 p1 ∧ sat c2 p2
-                   | ((IfC l c1 c2), (If r p1 p2))   => l = r ∧ sat c1 p1 ∧ sat c2 p2
-                   | ((WhileC l i v c), (While r p)) => l = r ∧
-                                                        sat c p ∧
-                                                        is_variant i v p
-                   | ((PanC l), r)                   => l = r
-                   | (DCC, _)                        => T
-                   | _                               => F
+Definition sat_def[simp]:
+  sat (HoareC P Q)     prog         = hoare P prog Q ∧
+  sat (SeqC c1 c2)     (Seq p1 p2)  = (sat c1 p1 ∧ sat c2 p2) ∧
+  sat (IfC l c1 c2)    (If r p1 p2) = (l = r ∧ sat c1 p1 ∧ sat c2 p2) ∧
+  sat (WhileC l i v c) (While r p)  = (l = r ∧ sat c p ∧ is_variant i v p) ∧
+  sat (PanC l)         r            = (l = r) ∧
+  sat DCC              _            = T ∧
+  sat _                _            = F
 End
 
+Theorem sat_cases[simp]:
+  (∀c1 c2 prog.   sat (SeqC c1 c2)     prog ⇔ ∃p1 p2. prog = Seq p1 p2  ∧ sat c1 p1 ∧ sat c2 p2) ∧
+  (∀e c1 c2 prog. sat (IfC e c1 c2)    prog ⇔ ∃p1 p2. prog = If e p1 p2 ∧ sat c1 p1 ∧ sat c2 p2) ∧
+  (∀e i v c prog. sat (WhileC e i v c) prog ⇔ ∃p.     prog = While e p  ∧ sat c p ∧ is_variant i v p)
+Proof
+  rw[] >> elim_cases [‘prog’] >> iff_tac >> rw[]
+QED
+
 Definition refine_def:
-  refine c1 c2 ⇔ ∀prog. sat c2 prog ⇒ sat c1 prog
+  refine (c1 : ('a,'ffi) Contract) (c2 : ('a,'ffi) Contract) ⇔ ∀prog. sat c2 prog ⇒ sat c1 prog
 End
 
 Theorem refine_reflexive:
@@ -75,8 +80,8 @@ QED
 Theorem strengthen_postcondition_refinement_rule:
   clkfree_q Q ∧ (∀s. Q' s ⇒ Q s) ⇒ refine (HoareC P Q) (HoareC P Q')
 Proof
-  rw[refine_def,sat_def,hoare_def,clkfree_q_def]
-  >> first_x_assum $ (qspec_then ‘s’ assume_tac)
+  rw[refine_def,hoare_def,clkfree_q_def]
+  >> first_x_assum $ drule_then assume_tac
   >> gvs[]
   >> qexists ‘k’
   >> pairarg_tac
@@ -86,17 +91,13 @@ QED
 Theorem weaken_precondition_refinement_rule:
   clkfree_p P ∧ (∀s. P s ⇒ P' s) ⇒ refine (HoareC P Q) (HoareC P' Q)
 Proof
-  rw[refine_def,sat_def,hoare_def,clkfree_p_def]
-  >> first_x_assum $ (qspec_then ‘s’ assume_tac)
-  >> gvs[]
-  >> qexists ‘k’
-  >> gvs[]
+  rw[refine_def,hoare_def,clkfree_p_def]
 QED
 
 Theorem skip_refinement_rule:
   clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ Q (NONE,s)) ⇒ refine (HoareC P Q) (PanC Skip)
 Proof
-  rw[refine_def,sat_def]
+  rw[refine_def]
   >> qspecl_then [‘P’, ‘Skip’, ‘Q’] assume_tac wp_is_weakest_precondition
   >> gvs[wp_skip]
 QED
@@ -118,7 +119,7 @@ Theorem store_refinement_rule:
                                                     mem_subst addr val (λs. Q (NONE,s)) s) ⇒
   refine (HoareC P Q) (PanC (Store dest src))
 Proof
-  rw[refine_def,sat_def]
+  rw[refine_def]
   >> qspecl_then [‘P’, ‘Store dest src’, ‘Q’] assume_tac wp_is_weakest_precondition
   >> gvs[wp_store]
 QED
@@ -130,7 +131,7 @@ Theorem store32_refinement_rule:
                                                     mem_subst_32 addr val (λs. Q (NONE,s)) s) ⇒
   refine (HoareC P Q) (PanC (Store32 dest src))
 Proof
-  rw[refine_def,sat_def]
+  rw[refine_def]
   >> qspecl_then [‘P’, ‘Store32 dest src’, ‘Q’] assume_tac wp_is_weakest_precondition
   >> gvs[wp_store32]
 QED
@@ -142,7 +143,7 @@ Theorem storebyte_refinement_rule:
                                                     mem_subst_byte addr val (λs. Q (NONE,s)) s) ⇒
   refine (HoareC P Q) (PanC (StoreByte dest src))
 Proof
-  rw[refine_def,sat_def]
+  rw[refine_def]
   >> qspecl_then [‘P’, ‘StoreByte dest src’, ‘Q’] assume_tac wp_is_weakest_precondition
   >> gvs[wp_storebyte]
 QED
@@ -150,17 +151,16 @@ QED
 Theorem seq_refinement_rule_pan:
   refine (SeqC (PanC l) (PanC r)) (PanC (Seq l r))
 Proof
-  rw[refine_def,sat_def]
+  rw[refine_def]
 QED
 
 Theorem seq_refinement_rule_fst:
   clkfree_p P ∧ clkfree_q Q ⇒
   refine (HoareC P Q) (SeqC (HoareC P (λ(r,t). r ≠ NONE ∧ Q (r,t))) DCC)
 Proof
-  rw[refine_def,sat_def]
-  >> elim_cases [‘prog’]
-  >> qspecl_then [‘P’, ‘p’, ‘(λ(r,t). r ≠ NONE ∧ Q (r,t))’] assume_tac wp_is_weakest_precondition
-  >> qspecl_then [‘P’, ‘Seq p p0’, ‘Q’] assume_tac wp_is_weakest_precondition
+  rw[refine_def]
+  >> qspecl_then [‘P’, ‘p1’, ‘(λ(r,t). r ≠ NONE ∧ Q (r,t))’] assume_tac wp_is_weakest_precondition
+  >> qspecl_then [‘P’, ‘Seq p1 p2’, ‘Q’] assume_tac wp_is_weakest_precondition
   >> qspecl_then [‘Q’, ‘NONE’] assume_tac clkfree_qqn
   >> gvs[wp_seq]
 QED
@@ -169,16 +169,15 @@ Theorem seq_refinement_rule_snd:
   clkfree_p P ∧ clkfree_q Q ∧ clkfree_p M ⇒
   refine (HoareC P Q) (SeqC (HoareC P (λ(r,t). r = NONE ∧ M t)) (HoareC M Q))
 Proof
-  rw[refine_def,sat_def]
-  >> elim_cases [‘prog’]
-  >> qspecl_then [‘P’, ‘p’, ‘(λ(r,t). r = NONE ∧ M t)’] assume_tac wp_is_weakest_precondition
-  >> qspecl_then [‘M’, ‘p0’, ‘Q’] assume_tac wp_is_weakest_precondition
-  >> qspecl_then [‘P’, ‘Seq p p0’, ‘Q’] assume_tac wp_is_weakest_precondition
-  >> ‘clkfree_p (wp p0 Q)’ by (metis_tac[wp_clkfree])
-  >> qspecl_then [‘wp p0 Q’, ‘NONE’] assume_tac clkfree_pq
+  rw[refine_def]
+  >> qspecl_then [‘P’, ‘p1’, ‘(λ(r,t). r = NONE ∧ M t)’] assume_tac wp_is_weakest_precondition
+  >> qspecl_then [‘M’, ‘p2’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> qspecl_then [‘P’, ‘Seq p1 p2’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> ‘clkfree_p (wp p2 Q)’ by (metis_tac[wp_clkfree])
+  >> qspecl_then [‘wp p2 Q’, ‘NONE’] assume_tac clkfree_pq
   >> qspecl_then [‘M’, ‘NONE’] assume_tac clkfree_pq
-  >> qspecl_then [‘M’, ‘wp p0 Q’, ‘NONE’] assume_tac pq_monotonic
-  >> qspecl_then [‘λ(r,t). r = NONE ∧ M t’, ‘λ(r,t). r = NONE ∧ wp p0 Q t’, ‘p’]
+  >> qspecl_then [‘M’, ‘wp p2 Q’, ‘NONE’] assume_tac pq_monotonic
+  >> qspecl_then [‘λ(r,t). r = NONE ∧ M t’, ‘λ(r,t). r = NONE ∧ wp p2 Q t’, ‘p1’]
                  assume_tac wp_monotonic
   >> gvs[wp_seq]
 QED
@@ -186,7 +185,7 @@ QED
 Theorem if_refinement_rule_pan:
   refine (IfC e (PanC l) (PanC r)) (PanC (If e l r))
 Proof
-  rw[refine_def,sat_def]
+  rw[refine_def]
 QED
 
 Theorem if_refinement_rule:
@@ -194,13 +193,12 @@ Theorem if_refinement_rule:
   refine (HoareC P Q) (IfC e (HoareC (λs. P s ∧ evaluates_to_true  e s) Q)
                              (HoareC (λs. P s ∧ evaluates_to_false e s) Q))
 Proof
-  rw[refine_def,sat_def]
-  >> elim_cases [‘prog’]
-  >> qspecl_then [‘λs. P s ∧ evaluates_to_true e s’, ‘p’, ‘Q’]
+  rw[refine_def]
+  >> qspecl_then [‘λs. P s ∧ evaluates_to_true e s’, ‘p1’, ‘Q’]
                  assume_tac wp_is_weakest_precondition
-  >> qspecl_then [‘λs. P s ∧ evaluates_to_false e s’, ‘p0’, ‘Q’]
+  >> qspecl_then [‘λs. P s ∧ evaluates_to_false e s’, ‘p2’, ‘Q’]
                  assume_tac wp_is_weakest_precondition
-  >> qspecl_then [‘P’, ‘If e p p0’, ‘Q’]
+  >> qspecl_then [‘P’, ‘If e p1 p2’, ‘Q’]
                  assume_tac wp_is_weakest_precondition
   >> ‘clkfree_p (λs. P s ∧ evaluates_to_true e s)’ by
      (metis_tac[clkfree_p_conj,clkfree_evaluates_to_true])
@@ -289,5 +287,5 @@ QED
 Theorem dcc_refinement_rule:
   refine DCC (PanC prog)
 Proof
-  rw[refine_def,sat_def]
+  rw[refine_def]
 QED
