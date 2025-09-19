@@ -95,7 +95,9 @@ Proof
 QED
 
 Theorem skip_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ Q (NONE,s)) ⇒ refine (HoareC P Q) (PanC Skip)
+  clkfree_p P ∧ clkfree_q Q ∧
+  (∀s. P s ⇒ Q (NONE,s)) ⇒
+  refine (HoareC P Q) (PanC Skip)
 Proof
   rw[refine_def]
   >> qspecl_then [‘P’, ‘Skip’, ‘Q’] assume_tac wp_is_weakest_precondition
@@ -103,8 +105,9 @@ Proof
 QED
 
 Theorem assign_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ valid_value k v src s ∧
-                                         subst k v src (λs. Q (NONE,s)) s) ⇒
+  clkfree_p P ∧ clkfree_q Q ∧
+  (∀s. P s ⇒ valid_value k v src s ∧
+             subst k v src (λs. Q (NONE,s)) s) ⇒
   refine (HoareC P Q) (PanC (Assign k v src))
 Proof
   rw[refine_def,sat_def]
@@ -113,10 +116,11 @@ Proof
 QED
 
 Theorem store_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
-                                                    evaluates_to src val s ∧
-                                                    addr_in_mem addr val s ∧
-                                                    mem_subst addr val (λs. Q (NONE,s)) s) ⇒
+  clkfree_p P ∧ clkfree_q Q ∧
+  (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
+                        evaluates_to src val s ∧
+                        addr_in_mem addr val s ∧
+                        mem_subst addr val (λs. Q (NONE,s)) s) ⇒
   refine (HoareC P Q) (PanC (Store dest src))
 Proof
   rw[refine_def]
@@ -125,10 +129,11 @@ Proof
 QED
 
 Theorem store32_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
-                                                    evaluates_to src (ValWord val) s ∧
-                                                    addr_in_mem_32 addr val s ∧
-                                                    mem_subst_32 addr val (λs. Q (NONE,s)) s) ⇒
+  clkfree_p P ∧ clkfree_q Q ∧
+  (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
+                        evaluates_to src (ValWord val) s ∧
+                        addr_in_mem_32 addr val s ∧
+                        mem_subst_32 addr val (λs. Q (NONE,s)) s) ⇒
   refine (HoareC P Q) (PanC (Store32 dest src))
 Proof
   rw[refine_def]
@@ -137,10 +142,11 @@ Proof
 QED
 
 Theorem storebyte_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
-                                                    evaluates_to src (ValWord val) s ∧
-                                                    addr_in_mem_byte addr val s ∧
-                                                    mem_subst_byte addr val (λs. Q (NONE,s)) s) ⇒
+  clkfree_p P ∧ clkfree_q Q ∧
+  (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
+                        evaluates_to src (ValWord val) s ∧
+                        addr_in_mem_byte addr val s ∧
+                        mem_subst_byte addr val (λs. Q (NONE,s)) s) ⇒
   refine (HoareC P Q) (PanC (StoreByte dest src))
 Proof
   rw[refine_def]
