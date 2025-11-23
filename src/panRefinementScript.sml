@@ -24,6 +24,7 @@ End
 
 Datatype:
   Contract = HoareC    (('a, 'ffi) state -> bool) (('a result option # ('a, 'ffi) state) -> bool)
+           | DecC      varname shape ('a panLang$exp) Contract
            | SeqC      Contract Contract
            | IfC       ('a panLang$exp) Contract Contract
            | WhileC    ('a panLang$exp)
@@ -35,19 +36,21 @@ Datatype:
 End
 
 Definition sat_def[simp]:
-  sat (HoareC P Q)     prog         = hoare P prog Q ∧
-  sat (SeqC c1 c2)     (Seq p1 p2)  = (sat c1 p1 ∧ sat c2 p2) ∧
-  sat (IfC l c1 c2)    (If r p1 p2) = (l = r ∧ sat c1 p1 ∧ sat c2 p2) ∧
-  sat (WhileC l i v c) (While r p)  = (l = r ∧ sat c p ∧ is_variant i v p) ∧
-  sat (PanC l)         r            = (l = r) ∧
-  sat DCC              _            = T ∧
-  sat _                _            = F
+  sat (HoareC P Q)      prog             = hoare P prog Q ∧
+  sat (DecC nl sl el c) (Dec nr sr er p) = (nl = nr ∧ sl = sr ∧ el = er ∧ sat c p) ∧
+  sat (SeqC c1 c2)      (Seq p1 p2)      = (sat c1 p1 ∧ sat c2 p2) ∧
+  sat (IfC l c1 c2)     (If r p1 p2)     = (l = r ∧ sat c1 p1 ∧ sat c2 p2) ∧
+  sat (WhileC l i v c)  (While r p)      = (l = r ∧ sat c p ∧ is_variant i v p) ∧
+  sat (PanC l)          r                = (l = r) ∧
+  sat DCC               _                = T ∧
+  sat _                 _                = F
 End
 
 Theorem sat_cases[simp]:
-  (∀c1 c2 prog.   sat (SeqC c1 c2)     prog ⇔ ∃p1 p2. prog = Seq p1 p2  ∧ sat c1 p1 ∧ sat c2 p2) ∧
-  (∀e c1 c2 prog. sat (IfC e c1 c2)    prog ⇔ ∃p1 p2. prog = If e p1 p2 ∧ sat c1 p1 ∧ sat c2 p2) ∧
-  (∀e i v c prog. sat (WhileC e i v c) prog ⇔ ∃p.     prog = While e p  ∧ sat c p ∧ is_variant i v p)
+  (∀n s e l c prog. sat (DecC s e l c)   prog ⇔ ∃p.     prog = Dec s e l p ∧ sat c p) ∧
+  (∀c1 c2 prog.     sat (SeqC c1 c2)     prog ⇔ ∃p1 p2. prog = Seq p1 p2   ∧ sat c1 p1 ∧ sat c2 p2) ∧
+  (∀e c1 c2 prog.   sat (IfC e c1 c2)    prog ⇔ ∃p1 p2. prog = If e p1 p2  ∧ sat c1 p1 ∧ sat c2 p2) ∧
+  (∀e i v c prog.   sat (WhileC e i v c) prog ⇔ ∃p.     prog = While e p   ∧ sat c p ∧ is_variant i v p)
 Proof
   rw[] >> elim_cases [‘prog’] >> iff_tac >> rw[]
 QED
@@ -95,13 +98,81 @@ Proof
   >> gvs[wp_skip]
 QED
 
+Definition set_val_def:
+  set_val P v src = {t | ∃s val. P s ∧
+                                 eval s src = SOME val ∧
+                                 t = s with locals := s.locals |+ (v,val)}
+End
+
+Theorem set_val_clkfree:
+  ∀P v src. clkfree_p P ⇒ clkfree_p (set_val P v src)
+Proof
+  rw[clkfree_p_def,set_val_def]
+  >> iff_tac
+  >> rw[]
+  >| [(qexistsl [‘s' with clock := k2’, ‘val’]),
+      (qexistsl [‘s' with clock := k1’, ‘val’])]
+  >> gvs[eval_upd_clock_eq]
+  >| [(first_x_assum $ qspecl_then [‘s'’, ‘s'.clock’, ‘k2’] assume_tac),
+      (first_x_assum $ qspecl_then [‘s'’, ‘s'.clock’, ‘k1’] assume_tac)]
+  >> gvs[state_component_equality,state_clock_idem]
+QED
+
+Definition ignore_val_def:
+  ignore_val Q v = {(r,t) | Q (r,t with locals := t.locals \\ v) ∨
+                            ∃val. Q (r,t with locals := t.locals |+ (v,val))}
+End
+
+Theorem ignore_val_clkfree:
+  ∀Q v. clkfree_q Q ⇒ clkfree_q (ignore_val Q v)
+Proof
+  rw[clkfree_q_def,ignore_val_def]
+  >> iff_tac
+  >> rw[]
+  >> pairarg_tac
+  >> gvs[]
+  >| [(qexists ‘(r,s with clock := k2)’),
+      (qexists ‘(r,s with clock := k2)’),
+      (qexists ‘(r,s with clock := k1)’),
+      (qexists ‘(r,s with clock := k1)’)]
+  >> gvs[]
+  >| [disj1_tac,
+      (disj2_tac >> qexists ‘val’),
+      disj1_tac,
+      (disj2_tac >> qexists ‘val’)]
+  >| [(first_x_assum $ qspecl_then [‘r’, ‘s with locals := s.locals \\ v’, ‘k1’, ‘k2’] assume_tac),
+      (first_x_assum $ qspecl_then [‘r’, ‘s with locals := s.locals |+ (v,val)’, ‘k1’, ‘k2’] assume_tac),
+      (first_x_assum $ qspecl_then [‘r’, ‘s with locals := s.locals \\ v’, ‘k1’, ‘k2’] assume_tac),
+      (first_x_assum $ qspecl_then [‘r’, ‘s with locals := s.locals |+ (v,val)’, ‘k1’, ‘k2’] assume_tac)]
+  >> gvs[]
+QED
+
+Theorem dec_refinement_rule:
+  clkfree_p P ∧ clkfree_q Q ∧
+  (∀s. P s ⇒ evaluates_to src val s) ∧
+  (∀s r t. P s ∧ (ignore_val Q v) (r,t) ⇒ Q (r,t with locals := res_var t.locals (v,FLOOKUP s.locals v))) ⇒
+  refine (HoareC P Q) (DecC v sh src (HoareC (set_val P v src) (ignore_val Q v)))
+Proof
+  rw[refine_def,hoare_def]
+  >> first_x_assum $ qspec_then ‘s with locals := s.locals |+ (v,val)’ assume_tac
+  >> first_x_assum $ qspec_then ‘s’ assume_tac
+  >> gvs[set_val_def,evaluates_to_def]
+  >> ‘∃k. (λ(r,t). r ≠ SOME Error ∧ r ≠ SOME TimeOut ∧ ignore_val Q v (r,t))
+              (evaluate
+                 (p,s with <|locals := s.locals |+ (v,val); clock := k|>))’ by (metis_tac[])
+  >> qexists ‘k’
+  >> rw[evaluate_def]
+  >> gvs[eval_upd_clock_eq]
+  >> rpt (pairarg_tac >> gvs[])
+QED
+
 Theorem assign_refinement_rule:
   clkfree_p P ∧ clkfree_q Q ∧
   (∀s. P s ⇒ valid_value k v src s ∧
              subst k v src (λs. Q (NONE,s)) s) ⇒
   refine (HoareC P Q) (PanC (Assign k v src))
 Proof
-  rw[refine_def,sat_def]
+  rw[refine_def]
   >> qspecl_then [‘P’, ‘Assign k v src’, ‘Q’] assume_tac wp_is_weakest_precondition
   >> gvs[wp_assign]
 QED
