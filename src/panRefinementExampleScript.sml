@@ -72,4 +72,34 @@ Proof
   pan_refinement_thms_tac while_refinement_rule_pan [evaluate_def]
 QED
 
+Definition appears_def:
+  appears x b e = λs. ∃addr. b ≤ addr ∧ addr ≤ e ∧ s.memory addr = x
+End
+
+Theorem linear_search1:
+  Abbrev (P = (λs. appears x b e s ∧ s.memory = the_mem)) ∧
+  Abbrev (Q = (λ(r,t). r = SOME (Return (ValWord ret)) ∧ b ≤ ret ∧ ret ≤ e ∧ the_mem ret = x)) ⇒
+  refine (HoareC P Q) (DecC v One (Const 0w) (HoareC (set_val P v (Const 0w)) (ignore_val Q v)))
+Proof
+  rw[]
+  >> irule dec_refinement_rule
+  >> unabbrev_all_tac
+  >> rw[]
+  >- (gvs[ignore_val_def] >> pairarg_tac >> gvs[])
+  >- (qexists ‘ValWord 0w’ >> gvs[evaluates_to_def,eval_def])
+  >- gvs[appears_def,clkfree_p_def]
+  >- gvs[clkfree_q_def]
+QED
+
+Theorem linear_search2:
+  Abbrev (P = (λs. appears x b e s ∧ s.memory = the_mem)) ∧
+  Abbrev (Q = (λ(r,t). r = SOME (Return (ValWord ret)) ∧ b ≤ ret ∧ ret ≤ e ∧ the_mem ret = x)) ∧
+  Abbrev (P' = set_val P v (Const 0w)) ∧
+  Abbrev (Q' = ignore_val Q v) ∧
+  Abbrev (e = (Cmp Less (Var v) (Const (e - b))) ∧
+  Abbrev (i = (λs. appears x ⇒
+  refine (HoareC P' Q') (WhileC e i v ())
+
+
+
 (* inst type, there might be something in wordsLib *)
