@@ -3,7 +3,7 @@
  ***********************************************************************)
 
 Theory panWeakestPrecondition
-Ancestors panSem panProps panPredicate
+Ancestors panReducedSem panReducedProps panPredicate
 
 fun elim_cases xs = EVERY (map (fn x => Cases_on x >> gvs[]) xs);
 

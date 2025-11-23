@@ -1,5 +1,5 @@
 Theory panRefinementExample
-Ancestors panSem panRefinement
+Ancestors panReducedSem panRefinement panPredicate
 Libs panRefinementLib
 
 Definition var_eq_def[simp]:
@@ -12,7 +12,7 @@ End
 
 Definition postcond_def[simp]:
   postcond (qr : 'a result option -> bool)
-           (qt : ('a, 'ffi) state -> bool) = λ(r,t). qr r ∧ qt t
+           (qt : 'a state -> bool) = λ(r,t). qr r ∧ qt t
 End
 
 Definition var_word[simp]:
@@ -35,23 +35,21 @@ Theorem assignment_2_step_1:
   Abbrev (QB = (λs. F)) ∧
   Abbrev (QR = (λ(s,r). F)) ∧
   Abbrev (QE = (λ(s,eid,e). F)) ∧
-  Abbrev (QF = (λ(s,f). F)) ∧
   Abbrev (e = (Cmp Less (Var Local x) (Const 10w))) ∧
   Abbrev (v = (λs. w2n (11w - var_word x s))) ∧
   Abbrev (i = (λs. ∃w. var_eq x w s ∧ 0w ≤ w ∧ w ≤ 10w)) ⇒
   refine (HoareC P Q)
-         (WhileC e i v (HoareC (while_body_pre i e) (while_body_post i QB QR QE QF)))
+         (WhileC e i v (HoareC (while_body_pre i e) (while_body_post i QB QR QE)))
 Proof
   pan_refinement_tac while_refinement_rule
 QED
 
 Theorem assignment_2_step_2:
   Abbrev (P  = (while_body_pre i e)) ∧
-  Abbrev (Q  = (while_body_post i QB QR QE QF)) ∧
+  Abbrev (Q  = (while_body_post i QB QR QE)) ∧
   Abbrev (QB = (λs. F)) ∧
   Abbrev (QR = (λ(s,r). F)) ∧
   Abbrev (QE = (λ(s,eid,e). F)) ∧
-  Abbrev (QF = (λ(s,f). F)) ∧
   Abbrev (e  = (Cmp Less (Var Local x) (Const 10w))) ∧
   Abbrev (i = (λs. ∃w. var_eq x w s ∧ 0w ≤ w ∧ w ≤ 10w)) ⇒
   refine (HoareC P Q)
@@ -86,20 +84,10 @@ Proof
   >> unabbrev_all_tac
   >> rw[]
   >- (gvs[ignore_val_def] >> pairarg_tac >> gvs[])
+  >- (gvs[ignore_val_def] >> pairarg_tac >> gvs[])
+  >- (gvs[ignore_val_def] >> pairarg_tac >> gvs[])
+  >- (gvs[ignore_val_def] >> pairarg_tac >> gvs[])
   >- (qexists ‘ValWord 0w’ >> gvs[evaluates_to_def,eval_def])
   >- gvs[appears_def,clkfree_p_def]
   >- gvs[clkfree_q_def]
 QED
-
-Theorem linear_search2:
-  Abbrev (P = (λs. appears x b e s ∧ s.memory = the_mem)) ∧
-  Abbrev (Q = (λ(r,t). r = SOME (Return (ValWord ret)) ∧ b ≤ ret ∧ ret ≤ e ∧ the_mem ret = x)) ∧
-  Abbrev (P' = set_val P v (Const 0w)) ∧
-  Abbrev (Q' = ignore_val Q v) ∧
-  Abbrev (e = (Cmp Less (Var v) (Const (e - b))) ∧
-  Abbrev (i = (λs. appears x ⇒
-  refine (HoareC P' Q') (WhileC e i v ())
-
-
-
-(* inst type, there might be something in wordsLib *)

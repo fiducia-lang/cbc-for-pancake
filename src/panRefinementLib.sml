@@ -4,7 +4,7 @@ struct
 open HolKernel BasicProvers boolLib bossLib blastLib
 open asmTheory finite_mapTheory wordsTheory
 open wordLangTheory
-open panSemTheory panPredicateTheory panRefinementTheory
+open panReducedSemTheory panPredicateTheory panRefinementTheory
 
 val pan_refinement_ss = srw_ss() && [clkfree_p_def,clkfree_q_def,
                                      while_body_pre_def,while_body_post_def,is_variant_def,

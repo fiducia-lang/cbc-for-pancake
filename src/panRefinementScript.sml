@@ -3,12 +3,12 @@
  ***********************************************************************)
 
 Theory panRefinement
-Ancestors panPredicate panSem panProps panWeakestPrecondition
+Ancestors panPredicate panReducedSem panReducedProps panWeakestPrecondition
 
 fun elim_cases xs = EVERY (map (fn x => Cases_on x >> gvs[]) xs);
 
 Theorem pq_monotonic:
-  ∀(A : ('a, 'ffi) state -> bool) B (res : 'a result option).
+  ∀(A : 'a state -> bool) B (res : 'a result option).
    (∀s. A s ⇒ B s) ⇒ (∀s. (λ(r,t). r = res ∧ A t) s ⇒ (λ(r,t). r = res ∧ B t) s)
 Proof
   rw[]
@@ -17,21 +17,21 @@ Proof
 QED
 
 Definition is_variant_def:
-  is_variant (i : ('a, 'ffi) state -> bool) (v : ('a, 'ffi) state -> num) p ⇔
+  is_variant (i : 'a state -> bool) (v : 'a state -> num) p ⇔
              (∀s. i s ⇒ v (SND (evaluate (p,s))) < v s) ∧
              (∀s k1 k2.  v (s with clock := k1) = v (s with clock := k2))
 End
 
 Datatype:
-  Contract = HoareC    (('a, 'ffi) state -> bool) (('a result option # ('a, 'ffi) state) -> bool)
-           | DecC      varname shape ('a panLang$exp) Contract
+  Contract = HoareC    ('a state -> bool) (('a result option # 'a state) -> bool)
+           | DecC      varname shape ('a panReducedLang$exp) Contract
            | SeqC      Contract Contract
-           | IfC       ('a panLang$exp) Contract Contract
-           | WhileC    ('a panLang$exp)
-                       (('a, 'ffi) state -> bool)
-                       (('a, 'ffi) state -> num)
+           | IfC       ('a panReducedLang$exp) Contract Contract
+           | WhileC    ('a panReducedLang$exp)
+                       ('a state -> bool)
+                       ('a state -> num)
                        Contract
-           | PanC      ('a panLang$prog)
+           | PanC      ('a panReducedLang$prog)
            | DCC
 End
 
@@ -56,7 +56,7 @@ Proof
 QED
 
 Definition refine_def:
-  refine (c1 : ('a,'ffi) Contract) (c2 : ('a,'ffi) Contract) ⇔ ∀prog. sat c2 prog ⇒ sat c1 prog
+  refine (c1 : 'a Contract) (c2 : 'a Contract) ⇔ ∀prog. sat c2 prog ⇒ sat c1 prog
 End
 
 Theorem refine_reflexive:
@@ -221,7 +221,7 @@ Theorem seq_refinement_rule_pan:
 Proof
   rw[refine_def]
 QED
-
+ 
 Theorem seq_refinement_rule_fst:
   clkfree_p P ∧ clkfree_q Q ⇒
   refine (HoareC P Q) (SeqC (HoareC P (λ(r,t). r ≠ NONE ∧ Q (r,t))) DCC)
@@ -287,12 +287,11 @@ Definition while_body_pre_def:
 End
 
 Definition while_body_post_def:
-  while_body_post i QB QR QE QF = λ(r,t). i t ∧ case r of
-                                                | SOME Break             => QB t
-                                                | SOME (Return v)        => QR (t,v)
-                                                | SOME (Exception eid e) => QE (t,eid,e)
-                                                | SOME (FinalFFI f)      => QF (t,f)
-                                                | _                      => T
+  while_body_post i QB QR QE = λ(r,t). i t ∧ case r of
+                                             | SOME Break             => QB t
+                                             | SOME (Return v)        => QR (t,v)
+                                             | SOME (Exception eid e) => QE (t,eid,e)
+                                             | _                      => T
 End
 
 Theorem while_refinement_rule:
@@ -303,10 +302,9 @@ Theorem while_refinement_rule:
   (∀s. i s ∧ evaluates_to_false e s ⇒ Q (NONE,s)) ∧
   (∀t.       QB t         ⇒ Q (NONE,                  t)) ∧
   (∀t v.     QR (t,v)     ⇒ Q (SOME (Return v),       t)) ∧
-  (∀t eid v. QE (t,eid,v) ⇒ Q (SOME (Exception eid v),t)) ∧
-  (∀t f.     QF (t,f)     ⇒ Q (SOME (FinalFFI f),     t)) ⇒
+  (∀t eid v. QE (t,eid,v) ⇒ Q (SOME (Exception eid v),t)) ⇒
   refine (HoareC P Q)
-         (WhileC e i v (HoareC (while_body_pre i e) (while_body_post i QB QR QE QF)))
+         (WhileC e i v (HoareC (while_body_pre i e) (while_body_post i QB QR QE)))
 Proof
   rw[refine_def,hoare_def,while_body_pre_def,while_body_post_def]
   >> last_x_assum $ drule_then assume_tac
@@ -352,8 +350,7 @@ Proof
   >| [(last_x_assum $ qspecl_then [‘NONE’, ‘t’, ‘t.clock’, ‘k''’] assume_tac),
       (last_x_assum $ qspecl_then [‘r'’, ‘t'’, ‘t'.clock’, ‘0’] assume_tac),
       (last_x_assum $ qspecl_then [‘SOME (Return v')’, ‘t’, ‘t.clock’, ‘k''’] assume_tac),
-      (last_x_assum $ qspecl_then [‘SOME (Exception m v')’, ‘t’, ‘t.clock’, ‘k''’] assume_tac),
-      (last_x_assum $ qspecl_then [‘SOME (FinalFFI f)’, ‘t’, ‘t.clock’, ‘k''’] assume_tac)]
+      (last_x_assum $ qspecl_then [‘SOME (Exception m v')’, ‘t’, ‘t.clock’, ‘k''’] assume_tac)]
   >> gvs[state_clock_idem]
 QED
 

@@ -3,7 +3,7 @@
  ***********************************************************************)
 
 Theory panPredicate
-Ancestors panSem panProps
+Ancestors panReducedSem panReducedProps
 
 fun elim_cases xs = EVERY (map (fn x => Cases_on x >> gvs[]) xs);
 
@@ -16,7 +16,7 @@ Definition clkfree_q_def:
 End
 
 Theorem clkfree_pq:
-  ∀(P : ('a, 'ffi) state -> bool) res : ('a result option). clkfree_p P ⇒
+  ∀(P : 'a state -> bool) (res : 'a result option). clkfree_p P ⇒
                                                             clkfree_q (λ(r,t). r = res ∧ P t)
 Proof
   rw[clkfree_p_def,clkfree_q_def]
