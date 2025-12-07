@@ -390,13 +390,72 @@ Definition while_body_pre_def:
   while_body_pre i e = λs. i s ∧ evaluates_to_true e s
 End
 
+Theorem clkfree_while_body_pre:
+  ∀i e . clkfree_p i ⇒ clkfree_p (while_body_pre i e)
+Proof
+  gvs[while_body_pre_def,clkfree_p_conj,clkfree_evaluates_to_true]
+QED
+
 Definition while_body_post_def:
-  while_body_post i QB QR QE = λ(r,t). i t ∧ case r of
+  while_body_post i QB (QR : 'a state # 'a v -> bool) QE = λ(r,t). case r of
                                              | SOME Break             => QB t
                                              | SOME (Return v)        => QR (t,v)
                                              | SOME (Exception eid e) => QE (t,eid,e)
-                                             | _                      => T
+                                             | _                      => i t
 End
+
+Definition clkfree_qr_def:
+  clkfree_qr QR ⇔ ∀r s k1 k2. QR (s with clock := k1,r) ⇔ QR (s with clock := k2,r)
+End
+
+Theorem clkfree_pqr:
+  ∀P R. clkfree_p P ⇒ clkfree_qr (λ(t : 'a state,r : 'a v). P t ∧ R r)
+Proof
+  rw[clkfree_p_def,clkfree_qr_def]
+  >> first_x_assum $ qspecl_then [‘s’, ‘k1’, ‘k2’] assume_tac
+  >> gvs[]
+QED
+
+Theorem clkfree_qr_cases:
+  clkfree_qr (λ(t : 'a state,r : 'a v). T) ∧ clkfree_qr (λ(t : 'a state,r : 'a v). F)
+Proof
+  rw[]
+  >| [qspecl_then [‘λs. T’, ‘λs. T’] assume_tac clkfree_pqr,
+      qspecl_then [‘λs. F’, ‘λs. T’] assume_tac clkfree_pqr]
+  >> gvs[clkfree_p_cases]
+QED
+
+Definition clkfree_qe_def:
+  clkfree_qe QE ⇔ ∀eid e s k1 k2. QE (s with clock := k1,eid,e) ⇔ QE (s with clock := k2,eid,e)
+End
+
+Theorem clkfree_pqe:
+  ∀P R S. clkfree_p P ⇒ clkfree_qe (λ(t : 'a state,eid : mlstring,e : 'a v). P t ∧ R eid ∧ S e)
+Proof
+  rw[clkfree_p_def,clkfree_qe_def]
+  >> first_x_assum $ qspecl_then [‘s’, ‘k1’, ‘k2’] assume_tac
+  >> gvs[]
+QED
+
+Theorem clkfree_qe_cases:
+  clkfree_qe (λ(t : 'a state,eid : mlstring,e : 'a v). T) ∧
+  clkfree_qe (λ(t : 'a state,eid : mlstring,e : 'a v). F)
+Proof
+  rw[]
+  >| [qspecl_then [‘λs. T’, ‘λs. T’, ‘λs. T’] assume_tac clkfree_pqe,
+      qspecl_then [‘λs. F’, ‘λs. T’, ‘λs. T’] assume_tac clkfree_pqe]
+  >> gvs[clkfree_p_cases]
+QED
+
+Theorem clkfree_while_body_post:
+  ∀i QB QR QE. clkfree_p i ∧ clkfree_p QB ∧ clkfree_qr QR ∧ clkfree_qe QE ⇒
+               clkfree_q (while_body_post i QB QR QE)
+Proof
+  rw[while_body_post_def]
+  >> rw[clkfree_q_def]
+  >> gvs[clkfree_p_def,clkfree_qr_def,clkfree_qe_def]
+  >> elim_cases [‘r’,‘x’]
+QED
 
 Theorem while_refinement_rule:
   ∀P Q QB QR QE QF e i v.
@@ -425,37 +484,56 @@ Proof
   >> qpat_x_assum ‘∀s. i s ∧ evaluates_to_true e s ⇒ _’ $ qspec_then ‘s’ assume_tac
   >> gvs[evaluates_to_true_def]
   >> pairarg_tac
-  >> gvs[clkfree_p_def]
-  >> qpat_x_assum ‘∀s k1 k2. i _ ⇔ i _’ $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
-  >> gvs[state_clock_idem]
-  >> qpat_x_assum ‘∀s. i s ⇒ v _ < v _’ $ qspec_then ‘s with clock := k’ assume_tac
-  >> qpat_x_assum ‘∀s k1 k2. v _ = v _’ $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
-  >> gvs[state_clock_idem]
-  >> first_x_assum $ qspec_then ‘t’ assume_tac
-  >> gvs[]
-  >> pairarg_tac
-  >> gvs[]
-  >> qspecl_then [‘t with clock := k'’, ‘t'’, ‘r'’, ‘While e p’] assume_tac
-                 (GEN_ALL evaluate_min_clock)
-  >> qspecl_then [‘s with clock := k’, ‘t’, ‘r’, ‘p’] assume_tac
-                 (GEN_ALL evaluate_min_clock)
-  >> gvs[]
-  >> qspecl_then [‘p’, ‘s with clock := k'''’, ‘r’, ‘t with clock := 0’, ‘k''’] assume_tac
-                 evaluate_add_clock_eq
-  >> gvs[]
-  >> qexists ‘k'' + k''' + 1’
-  >> rpt (pairarg_tac >> gvs[])
   >> elim_cases [‘r’]
-  >- (gvs[clkfree_q_def]
-      >> last_x_assum $ qspecl_then [‘r'’, ‘t'’, ‘t'.clock’, ‘0’] assume_tac
+  >- (gvs[clkfree_p_def]
+      >> qpat_x_assum ‘∀s k1 k2. i _ ⇔ i _’ $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
+      >> gvs[state_clock_idem]
+      >> qpat_x_assum ‘∀s. i s ⇒ v _ < v _’ $ qspec_then ‘s with clock := k’ assume_tac
+      >> qpat_x_assum ‘∀s k1 k2. v _ = v _’ $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
+      >> gvs[state_clock_idem]
+      >> first_x_assum $ qspec_then ‘t’ assume_tac
+      >> gvs[]
+      >> pairarg_tac
+      >> gvs[]
+      >> qspecl_then [‘t with clock := k'’, ‘t'’, ‘r’, ‘While e p’] assume_tac
+                     (GEN_ALL evaluate_min_clock)
+      >> qspecl_then [‘s with clock := k’, ‘t’, ‘NONE’, ‘p’] assume_tac
+                     (GEN_ALL evaluate_min_clock)
+      >> gvs[]
+      >> qspecl_then [‘p’, ‘s with clock := k'''’, ‘NONE’, ‘t with clock := 0’, ‘k''’] assume_tac
+                     evaluate_add_clock_eq
+      >> gvs[]
+      >> qexists ‘k'' + k''' + 1’
+      >> rpt (pairarg_tac >> gvs[])
+      >> gvs[clkfree_q_def]
+      >> last_x_assum $ qspecl_then [‘r’, ‘t'’, ‘t'.clock’, ‘0’] assume_tac
       >> gvs[state_clock_idem])
   >> elim_cases [‘x’]
-  >> gvs[clkfree_q_def]
-  >| [(last_x_assum $ qspecl_then [‘NONE’, ‘t’, ‘t.clock’, ‘k''’] assume_tac),
-      (last_x_assum $ qspecl_then [‘r'’, ‘t'’, ‘t'.clock’, ‘0’] assume_tac),
-      (last_x_assum $ qspecl_then [‘SOME (Return v')’, ‘t’, ‘t.clock’, ‘k''’] assume_tac),
-      (last_x_assum $ qspecl_then [‘SOME (Exception m v')’, ‘t’, ‘t.clock’, ‘k''’] assume_tac)]
-  >> gvs[state_clock_idem]
+  >- (qexists ‘k + 1’ >> gvs[])
+  >- (gvs[clkfree_p_def]
+      >> qpat_x_assum ‘∀s k1 k2. i _ ⇔ i _’ $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
+      >> gvs[state_clock_idem]
+      >> qpat_x_assum ‘∀s. i s ⇒ v _ < v _’ $ qspec_then ‘s with clock := k’ assume_tac
+      >> qpat_x_assum ‘∀s k1 k2. v _ = v _’ $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
+      >> gvs[state_clock_idem]
+      >> first_x_assum $ qspec_then ‘t’ assume_tac
+      >> gvs[]
+      >> pairarg_tac
+      >> gvs[]
+      >> qspecl_then [‘t with clock := k'’, ‘t'’, ‘r’, ‘While e p’] assume_tac
+                     (GEN_ALL evaluate_min_clock)
+      >> qspecl_then [‘s with clock := k’, ‘t’, ‘SOME Continue’, ‘p’] assume_tac
+                     (GEN_ALL evaluate_min_clock)
+      >> gvs[]
+      >> qspecl_then [‘p’, ‘s with clock := k'''’, ‘SOME Continue’, ‘t with clock := 0’, ‘k''’] assume_tac
+                     evaluate_add_clock_eq
+      >> gvs[]
+      >> qexists ‘k'' + k''' + 1’
+      >> rpt (pairarg_tac >> gvs[])
+      >> gvs[clkfree_q_def]
+      >> last_x_assum $ qspecl_then [‘r’, ‘t'’, ‘t'.clock’, ‘0’] assume_tac
+      >> gvs[state_clock_idem])
+  >> (qexists ‘k + 1’ >> gvs[])
 QED
 
 Theorem dcc_refinement_rule:
