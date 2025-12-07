@@ -541,3 +541,16 @@ Theorem dcc_refinement_rule:
 Proof
   rw[refine_def]
 QED
+
+Theorem return_refinement_rule:
+  clkfree_p P ∧ clkfree_q Q ∧
+  (∀s. P s ⇒ ∃val. evaluates_to e val s ∧
+                   size_of_shape (shape_of val) ≤ 32 ∧
+                   Q (SOME (Return val),empty_locals s)) ⇒
+  refine (HoareC P Q) (PanC (Return e))
+Proof
+  rw[refine_def]
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> gvs[wp_return]
+QED
+
