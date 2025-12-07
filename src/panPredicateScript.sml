@@ -7,6 +7,16 @@ Ancestors panReducedSem panReducedProps
 
 fun elim_cases xs = EVERY (map (fn x => Cases_on x >> gvs[]) xs);
 
+Theorem shape_of_val:
+  ∀w : 'a word_lab. shape_of (Val w) = One
+Proof
+  rw[]
+  >> qsuff_tac ‘∃w'. w = Word w'’
+  >- (rw[] >> rw[shape_of_def])
+  >> Cases_on ‘w’
+  >> gvs[]
+QED
+
 Definition clkfree_p_def:
   clkfree_p P ⇔ ∀s k1 k2. P (s with clock := k1) ⇔ P (s with clock := k2)
 End
@@ -159,6 +169,12 @@ Theorem clkfree_evaluates_to:
         clkfree_p (evaluates_to e v)
 Proof
   rw[clkfree_p_def,evaluates_to_def,eval_upd_clock_eq]
+QED
+
+Theorem evaluates_to_const:
+  ∀s. evaluates_to (Const val) (ValWord val) s
+Proof
+  rw[evaluates_to_def,eval_def]
 QED
 
 Definition evaluates_to_word_def:
