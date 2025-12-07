@@ -71,6 +71,32 @@ Proof
   rw[refine_def]
 QED
 
+Theorem refine_monotonic_dec:
+  ∀A B v sh exp. refine A B ⇒ refine (DecC v sh exp A) (DecC v sh exp B)
+Proof
+  rw[refine_def]
+QED
+
+Theorem refine_monotonic_seq:
+  ∀A B C. refine A B ⇒ refine (SeqC A C) (SeqC B C) ∧
+                       refine (SeqC C A) (SeqC C B)
+Proof
+  rw[refine_def]
+QED
+
+Theorem refine_monotonic_if:
+  ∀A B C e. refine A B ⇒ refine (IfC e A C) (IfC e B C) ∧
+                         refine (IfC e C A) (IfC e C B)
+Proof
+  rw[refine_def]
+QED
+
+Theorem refine_monotonic_while:
+  ∀A B e i v. refine A B ⇒ refine (WhileC e i v A) (WhileC e i v B)
+Proof
+  rw[refine_def]
+QED
+
 Theorem strengthen_postcondition_refinement_rule:
   clkfree_q Q ∧ (∀s. Q' s ⇒ Q s) ⇒ refine (HoareC P Q) (HoareC P Q')
 Proof
