@@ -124,10 +124,11 @@ Proof
   >> gvs[wp_skip]
 QED
 
+(* Deprecate for now
 Definition set_val_def:
-  set_val P v src = {t | ∃s val. P s ∧
-                                 eval s src = SOME val ∧
-                                 t = s with locals := s.locals |+ (v,val)}
+  set_val P v src = λt. ∃s val. P s ∧
+                                eval s src = SOME val ∧
+                                t = s with locals := s.locals |+ (v,val)
 End
 
 Theorem set_val_clkfree:
@@ -145,8 +146,8 @@ Proof
 QED
 
 Definition ignore_val_def:
-  ignore_val Q v = {(r,t) | Q (r,t with locals := t.locals \\ v) ∨
-                            ∃val. Q (r,t with locals := t.locals |+ (v,val))}
+  ignore_val Q v = λ(r,t). Q (r,t with locals := t.locals \\ v) ∨
+                           ∃val. Q (r,t with locals := t.locals |+ (v,val))
 End
 
 Theorem ignore_val_clkfree:
@@ -155,13 +156,6 @@ Proof
   rw[clkfree_q_def,ignore_val_def]
   >> iff_tac
   >> rw[]
-  >> pairarg_tac
-  >> gvs[]
-  >| [(qexists ‘(r,s with clock := k2)’),
-      (qexists ‘(r,s with clock := k2)’),
-      (qexists ‘(r,s with clock := k1)’),
-      (qexists ‘(r,s with clock := k1)’)]
-  >> gvs[]
   >| [disj1_tac,
       (disj2_tac >> qexists ‘val’),
       disj1_tac,
@@ -191,6 +185,9 @@ Proof
   >> gvs[eval_upd_clock_eq]
   >> rpt (pairarg_tac >> gvs[])
 QED
+
+*)
+
 
 Theorem assign_refinement_rule:
   clkfree_p P ∧ clkfree_q Q ∧
