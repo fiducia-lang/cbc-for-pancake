@@ -298,7 +298,7 @@ Theorem seq_refinement_rule_pan:
 Proof
   rw[refine_def]
 QED
- 
+
 Theorem seq_refinement_rule_fst:
   clkfree_p P ∧ clkfree_q Q ⇒
   refine (HoareC P Q) (SeqC (HoareC P (λ(r,t). r ≠ NONE ∧ Q (r,t))) DCC)
@@ -319,8 +319,8 @@ Proof
   >> qspecl_then [‘M’, ‘p2’, ‘Q’] assume_tac wp_is_weakest_precondition
   >> qspecl_then [‘P’, ‘Seq p1 p2’, ‘Q’] assume_tac wp_is_weakest_precondition
   >> ‘clkfree_p (wp p2 Q)’ by (metis_tac[wp_clkfree])
-  >> qspecl_then [‘wp p2 Q’, ‘NONE’] assume_tac clkfree_pq
-  >> qspecl_then [‘M’, ‘NONE’] assume_tac clkfree_pq
+  >> qspec_then ‘wp p2 Q’ assume_tac (cj 2 clkfree_pq)
+  >> qspec_then ‘M’ assume_tac (cj 2 clkfree_pq)
   >> qspecl_then [‘M’, ‘wp p2 Q’, ‘NONE’] assume_tac pq_monotonic
   >> qspecl_then [‘λ(r,t). r = NONE ∧ M t’, ‘λ(r,t). r = NONE ∧ wp p2 Q t’, ‘p1’]
                  assume_tac wp_monotonic
