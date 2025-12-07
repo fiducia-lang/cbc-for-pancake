@@ -327,6 +327,33 @@ Proof
   >> gvs[wp_seq]
 QED
 
+Theorem seq_refinement_rule_both:
+  clkfree_p P ∧ clkfree_q Q ∧ clkfree_p M ⇒
+  refine (HoareC P Q) (SeqC (HoareC P (λ(r,t). if r ≠ NONE then Q (r,t) else M t))
+                            (HoareC M Q))
+Proof
+  rw[refine_def]
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> qspecl_then [‘Q’, ‘M’, ‘NONE’] assume_tac clkfree_qnif
+  >> qspecl_then [‘P’, ‘p1’, ‘λ(r,t). if r ≠ NONE then Q (r,t) else M t’] assume_tac
+                 ((iffLR o cj 2) wp_is_weakest_precondition)
+  >> qspecl_then [‘M’, ‘p2’, ‘Q’] assume_tac
+                 ((iffLR o cj 2) wp_is_weakest_precondition)
+  >> qspecl_then [‘Q’, ‘M’, ‘p1’, ‘NONE’] assume_tac
+                 (iffLR wp_nif)
+  >> ‘clkfree_p (wp p2 Q)’ by (metis_tac[wp_clkfree])
+  >> qspec_then ‘wp p2 Q’ assume_tac (cj 2 clkfree_pq)
+  >> qspec_then ‘M’ assume_tac (cj 2 clkfree_pq)
+  >> qspecl_then [‘M’, ‘wp p2 Q’, ‘NONE’] assume_tac pq_monotonic
+  >> qspecl_then [‘λ(r,t). r = NONE ∧ M t’, ‘λ(r,t). r = NONE ∧ wp p2 Q t’, ‘p1’]
+                 assume_tac wp_monotonic
+  >> gvs[wp_seq]
+  >> rw[]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> Cases_on ‘wp p1 (λ(r,t). r ≠ NONE ∧ Q (r,t)) s’
+  >> gvs[]
+QED
+
 Theorem if_refinement_rule_pan:
   refine (IfC e (PanC l) (PanC r)) (PanC (If e l r))
 Proof
