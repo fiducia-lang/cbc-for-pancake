@@ -139,6 +139,17 @@ Proof
   rw[clkfree_p_def,evaluates_def,eval_upd_clock_eq]
 QED
 
+Definition evaluates_shape_def:
+  evaluates_shape e sh s ⇔ ∃v. eval s e = SOME v ∧ shape_of v = sh
+End
+
+Theorem clkfree_evaluates_shape:
+  ∀e sh. clkfree_p (λs. evaluates_shape e sh s) ∧
+         clkfree_p (evaluates_shape e sh)
+Proof
+  rw[clkfree_p_def,evaluates_shape_def,eval_upd_clock_eq]
+QED
+
 Definition evaluates_to_def:
   evaluates_to e v s ⇔ eval s e = SOME v
 End
@@ -195,6 +206,40 @@ Theorem evaluates_to_word_contradict:
         evaluates_to_false e s ⇒ ¬evaluates_to_true  e s
 Proof
   rw[evaluates_to_true_def,evaluates_to_false_def]
+QED
+
+Definition var_eq_val_def:
+  var_eq_val k v val s ⇔ case k of
+                         | Local => FLOOKUP s.locals v = SOME val
+                         | Global => FLOOKUP s.globals v = SOME val
+End
+
+Theorem clkfree_var_eq_val:
+  ∀k v val. clkfree_p (λs. var_eq_val k v val s) ∧
+            clkfree_p (var_eq_val k v val)
+Proof
+  rw[clkfree_p_def,var_eq_val_def]
+QED
+
+Theorem clkfree_var_eq_val_ex_pred:
+  ∀k v P. clkfree_p (λs. ∃val. var_eq_val k v (ValWord val) s ∧ P val)
+Proof
+  rw[clkfree_p_def,var_eq_val_def]
+QED
+
+Definition var_eq_mem_def:
+  var_eq_mem k v ad sh s ⇔ ∃addr value. eval s ad = SOME (ValWord addr) ∧
+                                        mem_load sh addr s.memaddrs s.memory = SOME value ∧
+                                        case k of
+                                        | Local => FLOOKUP s.locals v = SOME value
+                                        | Global => FLOOKUP s.globals v = SOME value
+End
+
+Theorem clkfree_var_eq_mem:
+  ∀k v ad sh. clkfree_p (λs. var_eq_mem k v ad sh s) ∧
+              clkfree_p (var_eq_mem k v ad sh)
+Proof
+  rw[clkfree_p_def,var_eq_mem_def,eval_upd_clock_eq]
 QED
 
 Definition valid_value_def:
