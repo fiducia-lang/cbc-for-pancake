@@ -3,9 +3,25 @@
 *)
 Theory panReducedProps
 Ancestors
-  panReducedLang panReducedSem
+  panReducedLang panReducedSem pan_commonProps
 Libs
   preamble
+
+Theorem mem_load_some_shape_eq:
+  ∀sh adr dm (m: 'a word -> 'a word_lab) v.
+  mem_load sh adr dm m = SOME v ==>
+  shape_of v = sh
+Proof
+  qsuff_tac ‘(∀sh adr dm (m: 'a word -> 'a word_lab) v.
+  mem_load sh adr dm m = SOME v ==> shape_of v = sh) /\
+  (∀sh adr dm (m: 'a word -> 'a word_lab) v.
+   mem_loads sh adr dm m = SOME v ==> MAP shape_of v = sh)’
+  >- metis_tac [] >>
+  ho_match_mp_tac mem_load_ind >> rw [mem_load_def] >>
+  cases_on ‘sh’ >> fs [option_case_eq] >>
+  rveq >> TRY (cases_on ‘m adr’) >> fs [shape_of_def] >>
+  metis_tac []
+QED
 
 Definition v2word_def:
   v2word (ValWord v) = Word v
@@ -124,4 +140,46 @@ Proof
   pop_assum (fn h => rewrite_tac[Once h])>>strip_tac>>
   drule_all evaluate_clock_sub>>
   strip_tac>>fs[]>>metis_tac[]
+QED
+
+Theorem update_locals_not_vars_eval_eq:
+  ∀s e v n w.
+  ~MEM n (var_exp e) /\
+  eval s e = SOME v ==>
+  eval (s with locals := s.locals |+ (n,w)) e = SOME v
+Proof
+  ho_match_mp_tac eval_ind >>
+  rpt conj_tac >> rpt gen_tac
+  >~ [‘Struct’]
+  >- (fs [var_exp_def] >>
+      rpt strip_tac >>
+      gvs[eval_def,AllCaseEqs()] >>
+      imp_res_tac opt_mmap_el >>
+      imp_res_tac opt_mmap_length_eq >>
+      gvs[opt_mmap_eq_some] >>
+      irule LIST_EQ >>
+      rw[EL_MAP] >>
+      first_x_assum irule >>
+      simp[MEM_EL,PULL_EXISTS] >>
+      irule_at (Pos last) EQ_REFL >>
+      simp[] >>
+      rw[] >>
+      gvs[MEM_FLAT,MEM_MAP,MEM_EL,PULL_FORALL, SF DNF_ss] >>
+      metis_tac[]) >>
+  rw[] >>
+  gvs[eval_def,var_exp_def, lookup_kvar_def, FLOOKUP_UPDATE,AllCaseEqs(),
+      PULL_EXISTS] >>
+  ntac 2 $ first_assum $ irule_at $ Pos last >>
+  imp_res_tac opt_mmap_el >>
+  imp_res_tac opt_mmap_length_eq >>
+  gvs[opt_mmap_eq_some] >>
+  irule LIST_EQ >>
+  rw[EL_MAP] >>
+  first_x_assum irule >>
+  simp[MEM_EL,PULL_EXISTS] >>
+  irule_at (Pos last) EQ_REFL >>
+  simp[] >>
+  rw[] >>
+  gvs[MEM_FLAT,MEM_MAP,MEM_EL,PULL_FORALL, SF DNF_ss] >>
+  metis_tac[]
 QED
