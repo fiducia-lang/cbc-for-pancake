@@ -22,6 +22,16 @@ Definition hoare_def:
                                     Q (r,t)
 End
 
+Theorem hoare_monotonic_p:
+  ∀P P' prog Q. (∀s. P s ⇔ P' s) ⇒ (hoare P prog Q ⇔ hoare P' prog Q)
+Proof
+  rw[hoare_def]
+  >> iff_tac
+  >> rw[]
+  >> drule clkfree_p_monotonic
+  >> gvs[]
+QED
+
 Definition wp_def:
   wp prog Q s ⇔ clkfree_q Q ∧
                 ∃k. let (r,t) = evaluate (prog,s with clock := k)
@@ -111,6 +121,22 @@ Proof
       >> gvs[clkfree_q_def]
       >> first_x_assum $ (qspecl_then [‘r’, ‘t'’, ‘t'.clock’, ‘k' + t'.clock - k’] assume_tac)
       >> gvs[state_clock_idem])
+QED
+
+Theorem wp_nif:
+  ∀Q M p res. clkfree_q Q ∧ clkfree_p M ⇒
+              (∀s. wp p (λ(r,t). if r ≠ res then Q (r,t) else M t) s ⇔
+                   wp p (λ(r,t). r ≠ res ∧ Q (r,t)) s ∨ wp p (λ(r,t). r = res ∧ M t) s)
+Proof
+  rw[wp_def]
+  >> iff_tac
+  >> rw[]
+  >> rpt (pairarg_tac >> gvs[])
+  >> gvs[clkfree_qnif]
+  >| [Cases_on ‘r ≠ res’ >> gvs[] >| [disj1_tac, disj2_tac] >> rw[], ALL_TAC, ALL_TAC]
+  >> gvs[clkfree_qqn,clkfree_pq]
+  >> qexists ‘k’
+  >> gvs[]
 QED
 
 Theorem wp_skip:
