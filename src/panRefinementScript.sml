@@ -4,6 +4,7 @@
 
 Theory panRefinement
 Ancestors panPredicate panReducedSem panReducedProps panWeakestPrecondition
+          finite_map[qualified]
 
 fun elim_cases xs = EVERY (map (fn x => Cases_on x >> gvs[]) xs);
 
@@ -188,6 +189,59 @@ QED
 
 *)
 
+Theorem dec_refinement_rule_pan:
+  refine (DecC v sh src (PanC prog)) (PanC (Dec v sh src prog))
+Proof
+  rw[refine_def]
+QED
+
+Theorem dec_refinement_rule_varfree:
+  clkfree_p P ∧
+  clkfree_q Q ∧
+  varfree_p v P ∧
+  varfree_q v Q ∧
+  (∀s. P s ⇒ evaluates_to src val s) ⇒
+  refine (HoareC P Q)
+         (DecC v sh src (HoareC (λs. P s ∧ var_eq_val Local v val s) Q))
+Proof
+  rw[refine_def,hoare_def]
+  >> gvs[varfree_p_def,var_eq_val_def]
+  >> last_x_assum $ drule_then (assume_tac o cj 1)
+  >> first_x_assum $ qspec_then ‘s with locals := s.locals |+ (v,val)’ assume_tac
+  >> gvs[finite_mapTheory.FLOOKUP_UPDATE]
+  >> qexists ‘k’
+  >> gvs[evaluate_def,eval_upd_clock_eq,evaluates_to_def]
+  >> rpt (pairarg_tac >> gvs[])
+  >> Cases_on ‘FLOOKUP s.locals v’
+  >> gvs[res_var_def,varfree_q_def]
+QED
+
+Theorem dec_refinement_rule_varfree_mem:
+  clkfree_p P ∧
+  clkfree_q Q ∧
+  varfree_p v P ∧
+  varfree_q v Q ∧
+  (∀s. P s ⇒ evaluates_shape (Load sh ad) sh s) ∧
+  ¬MEM v (var_exp ad) ⇒
+  refine (HoareC P Q)
+         (DecC v sh (Load sh ad)
+                    (HoareC (λs. P s ∧ var_eq_mem Local v ad sh s) Q))
+Proof
+  rw[refine_def,hoare_def]
+  >> gvs[evaluate_def,eval_upd_clock_eq]
+  >> last_x_assum $ drule_then assume_tac
+  >> gvs[evaluates_shape_def,varfree_p_def]
+  >> last_x_assum $ drule_then assume_tac o cj 1
+  >> first_x_assum $ qspec_then ‘s with locals := s.locals |+ (v,v')’ assume_tac
+  >> gvs[var_eq_mem_def,eval_def,finite_mapTheory.FLOOKUP_UPDATE]
+  >> elim_cases [‘eval s ad’, ‘x’, ‘w’]
+  >> ‘eval (s with locals := s.locals |+ (v,v')) ad = SOME (ValWord c)’ by metis_tac[update_locals_not_vars_eval_eq]
+  >> gvs[]
+  >> qexists ‘k’
+  >> rpt (pairarg_tac >> gvs[])
+  >> Cases_on ‘FLOOKUP s.locals v’
+  >> gvs[res_var_def,varfree_q_def]
+QED
 
 Theorem assign_refinement_rule:
   clkfree_p P ∧ clkfree_q Q ∧
