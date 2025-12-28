@@ -554,3 +554,44 @@ Proof
   >> gvs[wp_return]
 QED
 
+Theorem annot_refinement_rule:
+  clkfree_p P ∧ clkfree_q Q ∧
+  (∀s. P s ⇒ Q (NONE,s)) ⇒
+  refine (HoareC P Q) (PanC (Annot t1 t2))
+Proof
+  rw[refine_def]
+  >> qspecl_then [‘P’, ‘Annot t1 t2’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> gvs[wp_annot]
+QED
+
+Theorem break_refinement_rule:
+  clkfree_p P ∧ clkfree_q Q ∧
+  (∀s. P s ⇒ Q (SOME Break,s)) ⇒
+  refine (HoareC P Q) (PanC (Break))
+Proof
+  rw[refine_def]
+  >> qspecl_then [‘P’, ‘Break’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> gvs[wp_break]
+QED
+
+Theorem continue_refinement_rule:
+  clkfree_p P ∧ clkfree_q Q ∧
+  (∀s. P s ⇒ Q (SOME Continue,s)) ⇒
+  refine (HoareC P Q) (PanC (Continue))
+Proof
+  rw[refine_def]
+  >> qspecl_then [‘P’, ‘Continue’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> gvs[wp_continue]
+QED
+
+Theorem raise_refinement_rule:
+  clkfree_p P ∧ clkfree_q Q ∧
+  (∀s. P s ⇒ ∃sh val. has_eshape eid sh s ∧ evaluates_to e val s ∧ shape_of val = sh ∧
+                      size_of_shape (shape_of val) ≤ 32 ∧
+                      Q (SOME (Exception eid val),empty_locals s)) ⇒
+  refine (HoareC P Q) (PanC (Raise eid e))
+Proof
+  rw[refine_def]
+  >> qspecl_then [‘P’, ‘Raise eid e’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> gvs[wp_raise]
+QED

@@ -421,9 +421,6 @@ Definition evaluate_def:
          then (SOME (Exception eid value),empty_locals s)
          else (SOME Error,s)
      | _ => (SOME Error,s)) /\
-  (evaluate (Tick,s) =
-    if s.clock = 0 then (SOME TimeOut,empty_locals s)
-    else (NONE,dec_clock s)) /\
   (evaluate (Annot _ _,s) = (NONE, s))
 Termination
   wf_rel_tac `(inv_image (measure I LEX measure (prog_size (K 0)))

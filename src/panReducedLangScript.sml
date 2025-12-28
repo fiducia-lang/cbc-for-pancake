@@ -78,7 +78,6 @@ Datatype:
        | Continue
        | Raise eid ('a exp)
        | Return ('a exp)
-       | Tick
        | Annot mlstring mlstring
 End
 

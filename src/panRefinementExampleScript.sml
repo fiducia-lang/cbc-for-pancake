@@ -154,14 +154,14 @@ Theorem clkfree_mem_eq:
 Proof
   rw[clkfree_p_def,mem_eq_def]
 QED
-
+          
 Theorem linear_search:
    v ≠ v2 ⇒
    refine
      (HoareC
         (λs. s.memory = the_mem ∧ array_in_mem b l s ∧ appears (Word x) b l s)
         (λ(r,t).
-             t.memory = the_mem ∧ array_in_mem b l t ∧
+             t.memory = the_mem ∧
              ∃ret. r = SOME (Return (ValWord ret)) ∧ b ≤₊ ret ∧ ret <₊ b + l ∧
                    mem_eq (Word x) ret t))
      (PanC
@@ -177,7 +177,7 @@ Proof
   >> qpat_abbrev_tac ‘P = (λs.
              s.memory = the_mem ∧ array_in_mem b l s ∧ appears (Word x) b l s)’
   >> qpat_abbrev_tac ‘Q = (λ(r,t).
-             t.memory = the_mem ∧ array_in_mem b l t ∧
+             t.memory = the_mem ∧ 
              ∃ret. r = SOME (Return (ValWord ret)) ∧ b ≤₊ ret ∧ ret <₊ b + l ∧
                    mem_eq (Word x) ret t)’
   >> reverse (qsuff_tac ‘refine
