@@ -218,10 +218,11 @@ Proof
 QED
 
 Theorem evaluates_to_word_contradict:
-  ∀e s. evaluates_to_true  e s ⇒ ¬evaluates_to_false e s ∧
-        evaluates_to_false e s ⇒ ¬evaluates_to_true  e s
+  ∀e s. (evaluates_to_true  e s ⇒ ¬evaluates_to_false e s) ∧
+        (evaluates_to_false e s ⇒ ¬evaluates_to_true  e s)
 Proof
   rw[evaluates_to_true_def,evaluates_to_false_def]
+  >> gvs[]
 QED
 
 Definition var_eq_val_def:
