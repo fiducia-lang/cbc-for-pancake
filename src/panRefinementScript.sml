@@ -26,26 +26,29 @@ Datatype:
            | WhileC    ('a panLang$exp)
                        (('a, 'ffi) state -> bool)
                        Contract
+           | DecCallC  varname shape funname ('a panLang$exp list) Contract
            | PanC      ('a panLang$prog)
            | DCC
 End
 
 Definition sat_def[simp]:
-  sat (HoareC P Q)      prog             = hoare P prog Q ∧
-  sat (DecC nl sl el c) (Dec nr sr er p) = (nl = nr ∧ sl = sr ∧ el = er ∧ sat c p) ∧
-  sat (SeqC c1 c2)      (Seq p1 p2)      = (sat c1 p1 ∧ sat c2 p2) ∧
-  sat (IfC l c1 c2)     (If r p1 p2)     = (l = r ∧ sat c1 p1 ∧ sat c2 p2) ∧
-  sat (WhileC l i c)    (While r p)      = (l = r ∧ sat c p) ∧
-  sat (PanC l)          r                = (l = r) ∧
-  sat DCC               _                = T ∧
-  sat _                 _                = F
+  sat (HoareC P Q)             prog                    = hoare P prog Q ∧
+  sat (DecC nl sl el c)        (Dec nr sr er p)        = (nl = nr ∧ sl = sr ∧ el = er ∧ sat c p) ∧
+  sat (SeqC c1 c2)             (Seq p1 p2)             = (sat c1 p1 ∧ sat c2 p2) ∧
+  sat (IfC l c1 c2)            (If r p1 p2)            = (l = r ∧ sat c1 p1 ∧ sat c2 p2) ∧
+  sat (WhileC l i c)           (While r p)             = (l = r ∧ sat c p) ∧
+  sat (DecCallC vl sl fl el c) (DecCall vr sr fr er p) = (vl = vr ∧ sl = sr ∧ fl = fr ∧ el = er ∧ sat c p) ∧
+  sat (PanC l)                 r                       = (l = r) ∧
+  sat DCC                      _                       = T ∧
+  sat _                        _                       = F
 End
 
 Theorem sat_cases[simp]:
-  (∀n s e l c prog. sat (DecC s e l c)   prog ⇔ ∃p.     prog = Dec s e l p ∧ sat c p) ∧
-  (∀c1 c2 prog.     sat (SeqC c1 c2)     prog ⇔ ∃p1 p2. prog = Seq p1 p2   ∧ sat c1 p1 ∧ sat c2 p2) ∧
-  (∀e c1 c2 prog.   sat (IfC e c1 c2)    prog ⇔ ∃p1 p2. prog = If e p1 p2  ∧ sat c1 p1 ∧ sat c2 p2) ∧
-  (∀e i v c prog.   sat (WhileC e i c)   prog ⇔ ∃p.     prog = While e p   ∧ sat c p)
+  (∀n s e l c prog. sat (DecC s e l c)       prog ⇔ ∃p.     prog = Dec s e l p       ∧ sat c p) ∧
+  (∀c1 c2 prog.     sat (SeqC c1 c2)         prog ⇔ ∃p1 p2. prog = Seq p1 p2         ∧ sat c1 p1 ∧ sat c2 p2) ∧
+  (∀e c1 c2 prog.   sat (IfC e c1 c2)        prog ⇔ ∃p1 p2. prog = If e p1 p2        ∧ sat c1 p1 ∧ sat c2 p2) ∧
+  (∀e i v c prog.   sat (WhileC e i c)       prog ⇔ ∃p.     prog = While e p         ∧ sat c p) ∧
+  (∀v s f e c prog. sat (DecCallC v s f e c) prog ⇔ ∃p.     prog = DecCall v s f e p ∧ sat c p)
 Proof
   rw[] >> elim_cases [‘prog’] >> iff_tac >> rw[]
 QED
@@ -88,6 +91,12 @@ QED
 
 Theorem refine_monotonic_while:
   ∀A B e i. refine A B ⇒ refine (WhileC e i A) (WhileC e i B)
+Proof
+  rw[refine_def]
+QED
+
+Theorem refine_monotonic_deccall:
+  ∀A B v s f e. refine A B ⇒ refine (DecCallC v s f e A) (DecCallC v s f e B)
 Proof
   rw[refine_def]
 QED
@@ -523,6 +532,51 @@ Proof
   >> gvs[hoare_def]
   >> first_x_assum $ irule
   >> gvs[set_var_def]
+QED
+
+Theorem deccall_refinement_rule_pan:
+  refine (DecCallC v s f e (PanC p)) (PanC (DecCall v s f e p))
+Proof
+  rw[refine_def]
+QED
+
+Theorem deccall_refinement_rule:
+  varfree_q v Q ∧
+  (∀s. P s ⇒ ∃arg p lcls. OPT_MMAP (eval s) e = SOME args ∧
+                          lookup_code s.code f args = SOME (p,lcls) ∧
+                          hoare
+                            (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
+                            p
+                            (λ(r,t). case r of
+                                     | SOME (Return rv)         => shape_of rv = sh ∧ P' (set_var v rv (t with locals := s.locals))
+                                     | SOME (Exception eid exn) => Q (SOME (Exception eid exn),empty_locals t)
+                                     | SOME (FinalFFI f)        => Q (SOME (FinalFFI f),empty_locals t)
+                                     | _                        => F)) ⇒
+  refine (HoareC P Q) (DecCallC v sh f e (HoareC P' Q))
+Proof
+  rw[refine_def]
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> gvs[wp_deccall]
+  >> rw[]
+  >> first_x_assum $ drule_then assume_tac
+  >> gvs[]
+  >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
+  >> disj2_tac
+  >> gvs[wp_def] (* TODO REWORK *)
+  >> first_x_assum $ qspec_then ‘dec_clock s with locals := lcls’ assume_tac
+  >> pairarg_tac
+  >> gvs[]
+  >> Cases_on ‘r’
+  >> gvs[]
+  >> Cases_on ‘x’
+  >> gvs[]
+  >> pairarg_tac
+  >> gvs[reset_subst_def,hoare_def]
+  >> first_x_assum $ drule_then assume_tac
+  >> pairarg_tac
+  >> gvs[]
+  >> Cases_on ‘FLOOKUP s.locals v’
+  >> gvs[res_var_def,varfree_q_def]
 QED
 
 Theorem raise_refinement_rule:
