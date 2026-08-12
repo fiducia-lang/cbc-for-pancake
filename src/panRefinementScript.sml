@@ -3,14 +3,14 @@
  ***********************************************************************)
 
 Theory panRefinement
-Ancestors panPredicate panReducedSem panReducedProps panWeakestPrecondition
+Ancestors panSem panProps panPredicate panWeakestPrecondition
           finite_map[qualified]
 Libs BasicProvers
 
 fun elim_cases xs = EVERY (map (fn x => Cases_on x >> gvs[]) xs);
 
 Theorem pq_monotonic:
-  ∀(A : 'a state -> bool) B (res : 'a result option).
+  ∀(A : ('a,'ffi) state -> bool) B (res : 'a result option).
    (∀s. A s ⇒ B s) ⇒ (∀s. (λ(r,t). r = res ∧ A t) s ⇒ (λ(r,t). r = res ∧ B t) s)
 Proof
   rw[]
@@ -19,14 +19,14 @@ Proof
 QED
 
 Datatype:
-  Contract = HoareC    ('a state -> bool) (('a result option # 'a state) -> bool)
-           | DecC      varname shape ('a panReducedLang$exp) Contract
+  Contract = HoareC    (('a, 'ffi) state -> bool) (('a result option # ('a, 'ffi) state) -> bool)
+           | DecC      varname shape ('a panLang$exp) Contract
            | SeqC      Contract Contract
-           | IfC       ('a panReducedLang$exp) Contract Contract
-           | WhileC    ('a panReducedLang$exp)
-                       ('a state -> bool)
+           | IfC       ('a panLang$exp) Contract Contract
+           | WhileC    ('a panLang$exp)
+                       (('a, 'ffi) state -> bool)
                        Contract
-           | PanC      ('a panReducedLang$prog)
+           | PanC      ('a panLang$prog)
            | DCC
 End
 
@@ -51,7 +51,7 @@ Proof
 QED
 
 Definition refine_def:
-  refine (c1 : 'a Contract) (c2 : 'a Contract) ⇔ ∀prog. sat c2 prog ⇒ sat c1 prog
+  refine (c1 : ('a, 'ffi) Contract) (c2 : ('a, 'ffi) Contract) ⇔ ∀prog. sat c2 prog ⇒ sat c1 prog
 End
 
 Theorem refine_reflexive:
@@ -269,10 +269,11 @@ Definition while_body_pre_def:
 End
 
 Definition while_body_post_def:
-  while_body_post i QB (QR : 'a state # 'a v -> bool) QE = λ(r,t). case r of
+  while_body_post i QB (QR : ('a, 'ffi) state # 'a v -> bool) QE QF = λ(r,t). case r of
                                              | SOME Break             => QB t
                                              | SOME (Return v)        => QR (t,v)
                                              | SOME (Exception eid e) => QE (t,eid,e)
+                                             | SOME (FinalFFI res)    => QF (t,res)
                                              | _                      => i t
 End
 
@@ -284,9 +285,10 @@ Theorem while_refinement_rule:
   (∀s k. i s ⇒ i (s with clock := k)) ∧
   (∀t.       QB t         ⇒ Q (NONE,                  t)) ∧
   (∀t v.     QR (t,v)     ⇒ Q (SOME (Return v),       t)) ∧
-  (∀t eid v. QE (t,eid,v) ⇒ Q (SOME (Exception eid v),t)) ⇒
+  (∀t eid v. QE (t,eid,v) ⇒ Q (SOME (Exception eid v),t)) ∧
+  (∀t res.   QF (t,res)   ⇒ Q (SOME (FinalFFI res),   t)) ⇒
   refine (HoareC P Q)
-         (WhileC e i (HoareC (while_body_pre i e) (while_body_post i QB QR QE)))
+         (WhileC e i (HoareC (while_body_pre i e) (while_body_post i QB QR QE QF)))
 Proof
   rw[refine_def,hoare_def,while_body_pre_def,while_body_post_def]
   >> last_x_assum $ drule_then assume_tac

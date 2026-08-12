@@ -3,7 +3,7 @@
  ***********************************************************************)
 
 Theory panPredicate
-Ancestors panReducedLang panReducedSem pan_commonProps panReducedProps
+Ancestors panLang panSem
           list[qualified]
 Libs BasicProvers
 

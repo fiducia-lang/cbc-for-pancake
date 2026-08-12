@@ -1,5 +1,5 @@
 Theory panRefinementExample
-Ancestors panReducedLang panReducedSem panPredicate panWeakestPrecondition panRefinement
+Ancestors panLang panSem panPredicate panWeakestPrecondition panRefinement
           finite_map[qualified] wordLang[qualified]
 Libs panRefinementLib BasicProvers[qualified] blastLib[qualified] HolSmtLib[qualified]
 
@@ -17,7 +17,7 @@ End
 
 Definition postcond_def[simp]:
   postcond (qr : 'a result option -> bool)
-           (qt : 'a state -> bool) = λ(r,t). qr r ∧ qt t
+           (qt : ('a, 'ffi) state -> bool) = λ(r,t). qr r ∧ qt t
 End
 
 Definition var_word_def[simp]:
@@ -55,7 +55,7 @@ Proof
               (Cmp Less (Var Local x) (Const 10w)))
            (while_body_post
               (λs. ∃w. FLOOKUP s.locals x = SOME (w64 w) ∧ 0w ≤ w ∧ w ≤ 10w)
-              (λs. F) (λ(s,r). F) (λ(s,eid,e). F))))’)
+              (λs. F) (λ(s,r). F) (λ(s,eid,e). F) (λ(s,res). F))))’)
   >- (rpt (qpat_x_assum ‘refine _ _’ $ kall_tac)
       >> qpat_abbrev_tac ‘P = (λs. FLOOKUP s.locals x = SOME (w64 0w))’
       >> qpat_abbrev_tac ‘Q = (postcond (fixed NONE) (λs. FLOOKUP s.locals x = SOME (w64 10w)))’
@@ -64,6 +64,7 @@ Proof
       >> qpat_abbrev_tac ‘QB = (λs. F)’
       >> qpat_abbrev_tac ‘QR = (λ(s,r). F)’
       >> qpat_abbrev_tac ‘QE = (λ(s,eid,e). F)’
+      >> qpat_abbrev_tac ‘QF = (λ(s,res). F)’
       >> refine_blast_tac while_refinement_rule)
   >> rw[]
   >> reverse (qsuff_tac ‘refine
@@ -75,7 +76,7 @@ Proof
               (Cmp Less (Var Local x) (Const 10w)))
            (while_body_post
               (λs. ∃w. FLOOKUP s.locals x = SOME (w64 w) ∧ 0w ≤ w ∧ w ≤ 10w)
-              (λs. F) (λ(s,r). F) (λ(s,eid,e). F))))
+              (λs. F) (λ(s,r). F) (λ(s,eid,e). F) (λ(s,res). F))))
      (WhileC (Cmp Less (Var Local x) (Const 10w))
         (λs. ∃w. FLOOKUP s.locals x = SOME (w64 w) ∧ 0w ≤ w ∧ w ≤ 10w)
         (PanC (Assign Local x (Op Add [Var Local x; Const 1w]))))’)
@@ -86,7 +87,7 @@ Proof
           (Cmp Less (Var Local x) (Const 10w)))
        (while_body_post
           (λs. ∃w. FLOOKUP s.locals x = SOME (w64 w) ∧ 0w ≤ w ∧ w ≤ 10w)
-          (λs. F) (λ(s,r). F) (λ(s,eid,e). F)))
+          (λs. F) (λ(s,r). F) (λ(s,eid,e). F) (λ(s,res). F)))
      (PanC (Assign Local x (Op Add [Var Local x; Const 1w])))’)
       >- (rpt (qpat_x_assum ‘refine _ _’ $ kall_tac)
           >> qpat_abbrev_tac ‘e = (Cmp Less (Var Local x) (Const 10w))’
@@ -94,6 +95,7 @@ Proof
           >> qpat_abbrev_tac ‘QB = (λs. F)’
           >> qpat_abbrev_tac ‘QR = (λ(s,r). F)’
           >> qpat_abbrev_tac ‘QE = (λ(s,eid,e). F)’
+          >> qpat_abbrev_tac ‘QF = (λ(s,res). F)’
           >> gvs[]
           >> refine_blast_tac assign_refinement_rule)
       >> rw[]

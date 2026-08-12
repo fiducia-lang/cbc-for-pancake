@@ -6,7 +6,7 @@ struct
 open HolKernel BasicProvers boolLib bossLib blastLib simpLib HolSmtLib
 open asmTheory pred_setTheory finite_mapTheory wordsTheory
 open wordLangTheory
-open panReducedLangTheory panReducedSemTheory panReducedPropsTheory panPredicateTheory panRefinementTheory
+open panLangTheory panSemTheory panPropsTheory panPredicateTheory panRefinementTheory
 
 val pan_refinement_ss = srw_ss() && [varfree_p_def,varfree_q_def,
                                      evaluates_def,

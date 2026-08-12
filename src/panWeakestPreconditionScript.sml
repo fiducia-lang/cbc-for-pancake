@@ -3,7 +3,7 @@
  ***********************************************************************)
 
 Theory panWeakestPrecondition
-Ancestors panReducedSem panReducedProps panPredicate
+Ancestors panSem panProps panPredicate
 Libs BasicProvers
 
 Definition hoare_def:
