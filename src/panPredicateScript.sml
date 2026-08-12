@@ -3,9 +3,9 @@
  ***********************************************************************)
 
 Theory panPredicate
-Ancestors panReducedSem panReducedProps
-
-fun elim_cases xs = EVERY (map (fn x => Cases_on x >> gvs[]) xs);
+Ancestors panReducedLang panReducedSem pan_commonProps panReducedProps
+          list[qualified]
+Libs BasicProvers
 
 Theorem shape_of_val:
   ∀w : 'a word_lab. shape_of (Val w) = One
@@ -17,122 +17,11 @@ Proof
   >> gvs[]
 QED
 
-Definition clkfree_p_def:
-  clkfree_p P ⇔ ∀s k1 k2. P (s with clock := k1) ⇔ P (s with clock := k2)
-End
-
-Theorem clkfree_p_cases:
-  clkfree_p (λs. T) ∧ clkfree_p (λs. F)
-Proof
-  rw[clkfree_p_def]
-QED
-
-Definition clkfree_q_def:
-  clkfree_q Q ⇔ ∀r s k1 k2. Q (r,s with clock := k1) ⇔ Q (r,s with clock := k2)
-End
-
-Theorem clkfree_q_cases:
-  clkfree_q (λs. T) ∧ clkfree_q (λs. F) ∧ ∀R. clkfree_q (λ(r,t). R r)
-Proof
-  rw[clkfree_q_def]
-QED
-
-Theorem clkfree_pq:
-  ∀(P : 'a state -> bool). clkfree_p P ⇒ clkfree_q (λ(r : 'a result option,t). P t) ∧
-                                         ∀(R : 'a result option -> bool). clkfree_q (λ(r,t). R r ∧ P t)
-Proof
-  rw[clkfree_p_def,clkfree_q_def]
-  >> first_x_assum $ (qspecl_then [‘s’, ‘k1’, ‘k2’] assume_tac)
-  >> gvs[]
-QED
-
-Theorem clkfree_qp:
-  ∀Q res. clkfree_q Q ⇒ clkfree_p (λs. Q (res,s))
-Proof
-  rw[clkfree_p_def,clkfree_q_def]
-QED
-
-Theorem clkfree_qqn:
-  ∀Q res. clkfree_q Q ⇒ clkfree_q (λ(r,t). r ≠ res ∧ Q (r,t))
-Proof
-  rw[clkfree_p_def,clkfree_q_def]
-  >> first_x_assum $ (qspecl_then [‘r’, ‘s’, ‘k1’, ‘k2’] assume_tac)
-  >> gvs[]
-QED
-
-Theorem clkfree_qnif:
-  ∀Q M res. clkfree_q Q ∧ clkfree_p M ⇒
-            clkfree_q (λ(r,t). if r ≠ res then Q (r,t) else M t)
-Proof
-  rw[clkfree_q_def,clkfree_p_def]
-  >> iff_tac
-  >> rw[]
-  >> metis_tac[]
-QED
-
-Theorem clkfree_p_conj:
-  ∀P R. clkfree_p P ∧ clkfree_p R ⇒ clkfree_p (λs. P s ∧ R s)
-Proof
-  rw[clkfree_p_def]
-  >> rpt (first_x_assum $ (qspecl_then [‘s’, ‘k1’, ‘k2’] assume_tac))
-  >> gvs[]
-QED
-
-Theorem clkfree_p_disj:
-  ∀P R. clkfree_p P ∧ clkfree_p R ⇒ clkfree_p (λs. P s ∨ R s)
-Proof
-  rw[clkfree_p_def]
-  >> rpt (first_x_assum $ (qspecl_then [‘s’, ‘k1’, ‘k2’] assume_tac))
-  >> gvs[]
-QED
-
-Theorem clkfree_p_neg:
-  ∀P. clkfree_p P ⇒ clkfree_p (λs. ¬P s)
-Proof
-  rw[clkfree_p_def]
-QED
-
-Theorem clkfree_p_monotonic:
-  ∀P P'. (∀s. P s ⇔ P' s) ⇒ (clkfree_p P ⇔ clkfree_p P')
-Proof
-  rw[clkfree_p_def]
-QED
-
-Theorem clkfree_q_conj:
-  ∀(Q : 'a result option # 'a state -> bool) (R : 'a result option # 'a state -> bool).
-  clkfree_q Q ∧ clkfree_q R ⇒ clkfree_q (λ(r,t). Q (r,t) ∧ R (r,t))
-Proof
-  rw[clkfree_q_def]
-  >> rpt (first_x_assum $ (qspecl_then [‘r’, ‘s’, ‘k1’, ‘k2’] assume_tac))
-  >> gvs[]
-QED
-
-Theorem clkfree_q_disj:
-  ∀(Q : 'a result option # 'a state -> bool) (R : 'a result option # 'a state -> bool).
-  clkfree_q Q ∧ clkfree_q R ⇒ clkfree_q (λ(r,t). Q (r,t) ∨ R (r,t))
-Proof
-  rw[clkfree_q_def]
-  >> rpt (first_x_assum $ (qspecl_then [‘r’, ‘s’, ‘k1’, ‘k2’] assume_tac))
-  >> gvs[]
-QED
-
-Theorem clkfree_q_neg:
-  ∀Q. clkfree_q Q ⇒ clkfree_q (λ(r,t). ¬Q (r,t))
-Proof
-  rw[clkfree_q_def]
-QED
-
-Theorem clkfree_q_monotonic:
-  ∀Q Q'. (∀r. Q r ⇔ Q' r) ⇒ (clkfree_q Q ⇔ clkfree_q Q')
-Proof
-  rw[clkfree_q_def]
-QED
-
 Definition varfree_p_def:
   varfree_p v P ⇔ (∀s val. P s ⇒ P (s with locals := s.locals |+ (v,val)) ∧
                                  P (s with locals := s.locals \\ v))
 End
-
+        
 Definition varfree_q_def:
   varfree_q v Q ⇔ (∀r t val. Q (r,t) ⇒ Q (r,t with locals := t.locals |+ (v,val)) ∧
                                        Q (r,t with locals := t.locals \\ v))
@@ -140,36 +29,14 @@ End
 
 Definition evaluates_def:
   evaluates e s ⇔ ∃v. eval s e = SOME v
-End
-
-Theorem clkfree_evaluates:
-  ∀e. clkfree_p (λs. evaluates e s) ∧
-      clkfree_p (evaluates e)
-Proof
-  rw[clkfree_p_def,evaluates_def,eval_upd_clock_eq]
-QED
-
+End    
 Definition evaluates_shape_def:
   evaluates_shape e sh s ⇔ ∃v. eval s e = SOME v ∧ shape_of v = sh
 End
 
-Theorem clkfree_evaluates_shape:
-  ∀e sh. clkfree_p (λs. evaluates_shape e sh s) ∧
-         clkfree_p (evaluates_shape e sh)
-Proof
-  rw[clkfree_p_def,evaluates_shape_def,eval_upd_clock_eq]
-QED
-
 Definition evaluates_to_def:
   evaluates_to e v s ⇔ eval s e = SOME v
 End
-
-Theorem clkfree_evaluates_to:
-  ∀e v. clkfree_p (λs. evaluates_to e v s) ∧
-        clkfree_p (evaluates_to e v)
-Proof
-  rw[clkfree_p_def,evaluates_to_def,eval_upd_clock_eq]
-QED
 
 Theorem evaluates_to_const:
   ∀s. evaluates_to (Const val) (ValWord val) s
@@ -181,40 +48,20 @@ Definition evaluates_to_word_def:
   evaluates_to_word e s ⇔ ∃w. eval s e = SOME (ValWord w)
 End
 
-Theorem clkfree_evaluates_to_word:
-  ∀e. clkfree_p (λs. evaluates_to_word e s) ∧
-      clkfree_p (evaluates_to_word e)
-Proof
-  rw[clkfree_p_def,evaluates_to_word_def,eval_upd_clock_eq]
-QED
-
 Definition evaluates_to_true_def:
   evaluates_to_true e s ⇔ ∃w. eval s e = SOME (ValWord w) ∧ w ≠ 0w
 End
-
-Theorem clkfree_evaluates_to_true:
-  ∀e. clkfree_p (λs. evaluates_to_true e s) ∧
-      clkfree_p (evaluates_to_true e)
-Proof
-  rw[clkfree_p_def,evaluates_to_true_def,eval_upd_clock_eq]
-QED
 
 Definition evaluates_to_false_def:
   evaluates_to_false e s ⇔ ∃w. eval s e = SOME (ValWord w) ∧ w = 0w
 End
 
-Theorem clkfree_evaluates_to_false:
-  ∀e. clkfree_p (λs. evaluates_to_false e s) ∧
-      clkfree_p (evaluates_to_false e)
-Proof
-  rw[clkfree_p_def,evaluates_to_false_def,eval_upd_clock_eq]
-QED
-
 Theorem evaluates_to_word_lem:
   ∀e s. evaluates_to_word e s ⇒ evaluates_to_true e s ∨ evaluates_to_false e s
 Proof
   rw[evaluates_to_word_def,evaluates_to_true_def,evaluates_to_false_def]
-  >> elim_cases [‘w = 0w’]
+  >> Cases_on ‘w = 0w’
+  >> gvs[]
 QED
 
 Theorem evaluates_to_word_contradict:
@@ -225,40 +72,12 @@ Proof
   >> gvs[]
 QED
 
-Definition var_eq_val_def:
-  var_eq_val k v val s ⇔ case k of
-                         | Local => FLOOKUP s.locals v = SOME val
-                         | Global => FLOOKUP s.globals v = SOME val
+Definition var_eq_def:
+  var_eq k v e s ⇔ case k of
+                   | Local  => FLOOKUP s.locals  v = eval s e
+                   | Global => FLOOKUP s.globals v = eval s e
 End
-
-Theorem clkfree_var_eq_val:
-  ∀k v val. clkfree_p (λs. var_eq_val k v val s) ∧
-            clkfree_p (var_eq_val k v val)
-Proof
-  rw[clkfree_p_def,var_eq_val_def]
-QED
-
-Theorem clkfree_var_eq_val_ex_pred:
-  ∀k v P. clkfree_p (λs. ∃val. var_eq_val k v (ValWord val) s ∧ P val)
-Proof
-  rw[clkfree_p_def,var_eq_val_def]
-QED
-
-Definition var_eq_mem_def:
-  var_eq_mem k v ad sh s ⇔ ∃addr value. eval s ad = SOME (ValWord addr) ∧
-                                        mem_load sh addr s.memaddrs s.memory = SOME value ∧
-                                        case k of
-                                        | Local => FLOOKUP s.locals v = SOME value
-                                        | Global => FLOOKUP s.globals v = SOME value
-End
-
-Theorem clkfree_var_eq_mem:
-  ∀k v ad sh. clkfree_p (λs. var_eq_mem k v ad sh s) ∧
-              clkfree_p (var_eq_mem k v ad sh)
-Proof
-  rw[clkfree_p_def,var_eq_mem_def,eval_upd_clock_eq]
-QED
-
+        
 Definition valid_value_def:
   valid_value k v e s ⇔ ∃value. eval s e = SOME value ∧
                                 case k of
@@ -275,8 +94,8 @@ End
 
 Definition reset_subst_def:
   reset_subst v s Q (r,t) ⇔ Q (r,t with locals := res_var t.locals (v,FLOOKUP s.locals v))
-End
-
+End            
+        
 Definition has_eshape_def:
   has_eshape eid sh s ⇔ FLOOKUP s.eshapes eid = SOME sh
 End

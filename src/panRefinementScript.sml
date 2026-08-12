@@ -5,6 +5,7 @@
 Theory panRefinement
 Ancestors panPredicate panReducedSem panReducedProps panWeakestPrecondition
           finite_map[qualified]
+Libs BasicProvers
 
 fun elim_cases xs = EVERY (map (fn x => Cases_on x >> gvs[]) xs);
 
@@ -17,12 +18,6 @@ Proof
   >> gvs[]
 QED
 
-Definition is_variant_def:
-  is_variant (i : 'a state -> bool) (v : 'a state -> num) p ⇔
-             (∀s. i s ⇒ v (SND (evaluate (p,s))) < v s) ∧
-             (∀s k1 k2.  v (s with clock := k1) = v (s with clock := k2))
-End
-
 Datatype:
   Contract = HoareC    ('a state -> bool) (('a result option # 'a state) -> bool)
            | DecC      varname shape ('a panReducedLang$exp) Contract
@@ -30,7 +25,6 @@ Datatype:
            | IfC       ('a panReducedLang$exp) Contract Contract
            | WhileC    ('a panReducedLang$exp)
                        ('a state -> bool)
-                       ('a state -> num)
                        Contract
            | PanC      ('a panReducedLang$prog)
            | DCC
@@ -41,7 +35,7 @@ Definition sat_def[simp]:
   sat (DecC nl sl el c) (Dec nr sr er p) = (nl = nr ∧ sl = sr ∧ el = er ∧ sat c p) ∧
   sat (SeqC c1 c2)      (Seq p1 p2)      = (sat c1 p1 ∧ sat c2 p2) ∧
   sat (IfC l c1 c2)     (If r p1 p2)     = (l = r ∧ sat c1 p1 ∧ sat c2 p2) ∧
-  sat (WhileC l i v c)  (While r p)      = (l = r ∧ sat c p ∧ is_variant i v p) ∧
+  sat (WhileC l i c)    (While r p)      = (l = r ∧ sat c p) ∧
   sat (PanC l)          r                = (l = r) ∧
   sat DCC               _                = T ∧
   sat _                 _                = F
@@ -51,7 +45,7 @@ Theorem sat_cases[simp]:
   (∀n s e l c prog. sat (DecC s e l c)   prog ⇔ ∃p.     prog = Dec s e l p ∧ sat c p) ∧
   (∀c1 c2 prog.     sat (SeqC c1 c2)     prog ⇔ ∃p1 p2. prog = Seq p1 p2   ∧ sat c1 p1 ∧ sat c2 p2) ∧
   (∀e c1 c2 prog.   sat (IfC e c1 c2)    prog ⇔ ∃p1 p2. prog = If e p1 p2  ∧ sat c1 p1 ∧ sat c2 p2) ∧
-  (∀e i v c prog.   sat (WhileC e i v c) prog ⇔ ∃p.     prog = While e p   ∧ sat c p ∧ is_variant i v p)
+  (∀e i v c prog.   sat (WhileC e i c)   prog ⇔ ∃p.     prog = While e p   ∧ sat c p)
 Proof
   rw[] >> elim_cases [‘prog’] >> iff_tac >> rw[]
 QED
@@ -93,101 +87,34 @@ Proof
 QED
 
 Theorem refine_monotonic_while:
-  ∀A B e i v. refine A B ⇒ refine (WhileC e i v A) (WhileC e i v B)
+  ∀A B e i. refine A B ⇒ refine (WhileC e i A) (WhileC e i B)
 Proof
   rw[refine_def]
 QED
 
 Theorem strengthen_postcondition_refinement_rule:
-  clkfree_q Q ∧ (∀s. Q' s ⇒ Q s) ⇒ refine (HoareC P Q) (HoareC P Q')
+  (∀s. Q' s ⇒ Q s) ⇒ refine (HoareC P Q) (HoareC P Q')
 Proof
-  rw[refine_def,hoare_def,clkfree_q_def]
+  rw[refine_def,hoare_def]
   >> first_x_assum $ drule_then assume_tac
-  >> gvs[]
-  >> qexists ‘k’
   >> pairarg_tac
   >> gvs[]
 QED
 
 Theorem weaken_precondition_refinement_rule:
-  clkfree_p P ∧ (∀s. P s ⇒ P' s) ⇒ refine (HoareC P Q) (HoareC P' Q)
+  (∀s. P s ⇒ P' s) ⇒ refine (HoareC P Q) (HoareC P' Q)
 Proof
-  rw[refine_def,hoare_def,clkfree_p_def]
+  rw[refine_def,hoare_def]
 QED
 
 Theorem skip_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧
   (∀s. P s ⇒ Q (NONE,s)) ⇒
   refine (HoareC P Q) (PanC Skip)
 Proof
   rw[refine_def]
-  >> qspecl_then [‘P’, ‘Skip’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_skip]
 QED
-
-(* Deprecate for now
-Definition set_val_def:
-  set_val P v src = λt. ∃s val. P s ∧
-                                eval s src = SOME val ∧
-                                t = s with locals := s.locals |+ (v,val)
-End
-
-Theorem set_val_clkfree:
-  ∀P v src. clkfree_p P ⇒ clkfree_p (set_val P v src)
-Proof
-  rw[clkfree_p_def,set_val_def]
-  >> iff_tac
-  >> rw[]
-  >| [(qexistsl [‘s' with clock := k2’, ‘val’]),
-      (qexistsl [‘s' with clock := k1’, ‘val’])]
-  >> gvs[eval_upd_clock_eq]
-  >| [(first_x_assum $ qspecl_then [‘s'’, ‘s'.clock’, ‘k2’] assume_tac),
-      (first_x_assum $ qspecl_then [‘s'’, ‘s'.clock’, ‘k1’] assume_tac)]
-  >> gvs[state_component_equality,state_clock_idem]
-QED
-
-Definition ignore_val_def:
-  ignore_val Q v = λ(r,t). Q (r,t with locals := t.locals \\ v) ∨
-                           ∃val. Q (r,t with locals := t.locals |+ (v,val))
-End
-
-Theorem ignore_val_clkfree:
-  ∀Q v. clkfree_q Q ⇒ clkfree_q (ignore_val Q v)
-Proof
-  rw[clkfree_q_def,ignore_val_def]
-  >> iff_tac
-  >> rw[]
-  >| [disj1_tac,
-      (disj2_tac >> qexists ‘val’),
-      disj1_tac,
-      (disj2_tac >> qexists ‘val’)]
-  >| [(first_x_assum $ qspecl_then [‘r’, ‘s with locals := s.locals \\ v’, ‘k1’, ‘k2’] assume_tac),
-      (first_x_assum $ qspecl_then [‘r’, ‘s with locals := s.locals |+ (v,val)’, ‘k1’, ‘k2’] assume_tac),
-      (first_x_assum $ qspecl_then [‘r’, ‘s with locals := s.locals \\ v’, ‘k1’, ‘k2’] assume_tac),
-      (first_x_assum $ qspecl_then [‘r’, ‘s with locals := s.locals |+ (v,val)’, ‘k1’, ‘k2’] assume_tac)]
-  >> gvs[]
-QED
-
-Theorem dec_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧
-  (∀s. P s ⇒ evaluates_to src val s) ∧
-  (∀s r t. P s ∧ (ignore_val Q v) (r,t) ⇒ Q (r,t with locals := res_var t.locals (v,FLOOKUP s.locals v))) ⇒
-  refine (HoareC P Q) (DecC v sh src (HoareC (set_val P v src) (ignore_val Q v)))
-Proof
-  rw[refine_def,hoare_def]
-  >> first_x_assum $ qspec_then ‘s with locals := s.locals |+ (v,val)’ assume_tac
-  >> first_x_assum $ qspec_then ‘s’ assume_tac
-  >> gvs[set_val_def,evaluates_to_def]
-  >> ‘∃k. (λ(r,t). r ≠ SOME Error ∧ r ≠ SOME TimeOut ∧ ignore_val Q v (r,t))
-              (evaluate
-                 (p,s with <|locals := s.locals |+ (v,val); clock := k|>))’ by (metis_tac[])
-  >> qexists ‘k’
-  >> rw[evaluate_def]
-  >> gvs[eval_upd_clock_eq]
-  >> rpt (pairarg_tac >> gvs[])
-QED
-
-*)
 
 Theorem dec_refinement_rule_pan:
   refine (DecC v sh src (PanC prog)) (PanC (Dec v sh src prog))
@@ -196,66 +123,65 @@ Proof
 QED
 
 Theorem dec_refinement_rule_varfree:
-  clkfree_p P ∧
-  clkfree_q Q ∧
   varfree_p v P ∧
   varfree_q v Q ∧
-  (∀s. P s ⇒ evaluates_to src val s) ⇒
+  ¬MEM v (var_exp src) ∧
+  (∀s. P s ⇒ evaluates src s) ⇒
   refine (HoareC P Q)
-         (DecC v sh src (HoareC (λs. P s ∧ var_eq_val Local v val s) Q))
+         (DecC v sh src (HoareC (λs. P s ∧ var_eq Local v src s) Q))
 Proof
-  rw[refine_def,hoare_def]
-  >> gvs[varfree_p_def,var_eq_val_def]
-  >> last_x_assum $ drule_then (assume_tac o cj 1)
-  >> first_x_assum $ qspec_then ‘s with locals := s.locals |+ (v,val)’ assume_tac
-  >> gvs[finite_mapTheory.FLOOKUP_UPDATE]
-  >> qexists ‘k’
-  >> gvs[evaluate_def,eval_upd_clock_eq,evaluates_to_def]
-  >> rpt (pairarg_tac >> gvs[])
-  >> Cases_on ‘FLOOKUP s.locals v’
-  >> gvs[res_var_def,varfree_q_def]
-QED
-
-Theorem dec_refinement_rule_varfree_mem:
-  clkfree_p P ∧
-  clkfree_q Q ∧
-  varfree_p v P ∧
-  varfree_q v Q ∧
-  (∀s. P s ⇒ evaluates_shape (Load sh ad) sh s) ∧
-  ¬MEM v (var_exp ad) ⇒
-  refine (HoareC P Q)
-         (DecC v sh (Load sh ad)
-                    (HoareC (λs. P s ∧ var_eq_mem Local v ad sh s) Q))
-Proof
-  rw[refine_def,hoare_def]
-  >> gvs[evaluate_def,eval_upd_clock_eq]
+  rw[refine_def]
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> dxrule_then assume_tac $ ((iffLR o cj 2) wp_is_weakest_precondition)
+  >> rw[]
   >> last_x_assum $ drule_then assume_tac
-  >> gvs[evaluates_shape_def,varfree_p_def]
-  >> last_x_assum $ drule_then assume_tac o cj 1
-  >> first_x_assum $ qspec_then ‘s with locals := s.locals |+ (v,v')’ assume_tac
-  >> gvs[var_eq_mem_def,eval_def,finite_mapTheory.FLOOKUP_UPDATE]
-  >> elim_cases [‘eval s ad’, ‘x’, ‘w’]
-  >> ‘eval (s with locals := s.locals |+ (v,v')) ad = SOME (ValWord c)’ by metis_tac[update_locals_not_vars_eval_eq]
-  >> gvs[]
-  >> qexists ‘k’
-  >> rpt (pairarg_tac >> gvs[])
+  >> gvs[wp_dec,evaluates_def]
+  >> last_x_assum $ qspec_then ‘s with locals := s.locals |+ (v,v')’ assume_tac
+  >> gvs[varfree_p_def,var_eq_def,finite_mapTheory.FLOOKUP_UPDATE,eval_fresh_var]
+  >> gvs[subst_def]
+  >> qsuff_tac ‘reset_subst v s Q = Q’
+  >- rw[]
+  >> gvs[FUN_EQ_THM]
+  >> PairCases
+  >> iff_tac
+  >> gvs[reset_subst_def]
   >> Cases_on ‘FLOOKUP s.locals v’
   >> gvs[res_var_def,varfree_q_def]
+  >> Cases_on ‘FLOOKUP x1.locals v’
+  >> rw[]
+  >- (‘x1 with locals := x1.locals \\ v = x1’ suffices_by metis_tac[]
+      >> ‘x1.locals \\ v = x1.locals’ suffices_by gvs[state_component_equality]
+      >> gvs[finite_mapTheory.flookup_thm,finite_mapTheory.DOMSUB_NOT_IN_DOM])
+  >- (first_x_assum $ qspecl_then [‘x0’, ‘x1 with locals := x1.locals \\ v’, ‘x’] assume_tac
+      >> gvs[]
+      >> ‘x1 with locals := x1.locals |+ (v,x) = x1’ suffices_by metis_tac[]
+      >> ‘x1.locals |+ (v,x) = x1.locals’ suffices_by gvs[state_component_equality]
+      >> irule finite_mapTheory.FUPDATE_ELIM
+      >> gvs[finite_mapTheory.flookup_thm])
+  >- (first_x_assum $ qspecl_then [‘x0’, ‘x1 with locals := x1.locals |+ (v,x)’, ‘x’] assume_tac
+      >> gvs[]
+      >> ‘x1 with locals := x1.locals \\ v = x1’ suffices_by metis_tac[]
+      >> ‘x1.locals \\ v = x1.locals’ suffices_by gvs[state_component_equality]
+      >> gvs[finite_mapTheory.flookup_thm,finite_mapTheory.DOMSUB_NOT_IN_DOM])
+  >> first_x_assum $ qspecl_then [‘x0’, ‘x1 with locals := x1.locals |+ (v,x)’, ‘x'’] assume_tac
+  >> gvs[]
+  >> ‘x1 with locals := x1.locals |+ (v,x') = x1’ suffices_by metis_tac[]
+  >> ‘x1.locals |+ (v,x') = x1.locals’ suffices_by gvs[state_component_equality]
+  >> irule finite_mapTheory.FUPDATE_ELIM
+  >> gvs[finite_mapTheory.flookup_thm]
 QED
 
 Theorem assign_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧
   (∀s. P s ⇒ valid_value k v src s ∧
              subst k v src (λs. Q (NONE,s)) s) ⇒
   refine (HoareC P Q) (PanC (Assign k v src))
 Proof
   rw[refine_def]
-  >> qspecl_then [‘P’, ‘Assign k v src’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_assign]
 QED
 
 Theorem store_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧
   (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
                         evaluates_to src val s ∧
                         addr_in_mem addr val s ∧
@@ -263,12 +189,11 @@ Theorem store_refinement_rule:
   refine (HoareC P Q) (PanC (Store dest src))
 Proof
   rw[refine_def]
-  >> qspecl_then [‘P’, ‘Store dest src’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_store]
 QED
 
 Theorem store32_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧
   (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
                         evaluates_to src (ValWord val) s ∧
                         addr_in_mem_32 addr val s ∧
@@ -276,12 +201,11 @@ Theorem store32_refinement_rule:
   refine (HoareC P Q) (PanC (Store32 dest src))
 Proof
   rw[refine_def]
-  >> qspecl_then [‘P’, ‘Store32 dest src’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_store32]
 QED
 
 Theorem storebyte_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧
   (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
                         evaluates_to src (ValWord val) s ∧
                         addr_in_mem_byte addr val s ∧
@@ -289,7 +213,7 @@ Theorem storebyte_refinement_rule:
   refine (HoareC P Q) (PanC (StoreByte dest src))
 Proof
   rw[refine_def]
-  >> qspecl_then [‘P’, ‘StoreByte dest src’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_storebyte]
 QED
 
@@ -299,58 +223,21 @@ Proof
   rw[refine_def]
 QED
 
-Theorem seq_refinement_rule_fst:
-  clkfree_p P ∧ clkfree_q Q ⇒
-  refine (HoareC P Q) (SeqC (HoareC P (λ(r,t). r ≠ NONE ∧ Q (r,t))) DCC)
-Proof
-  rw[refine_def]
-  >> qspecl_then [‘P’, ‘p1’, ‘(λ(r,t). r ≠ NONE ∧ Q (r,t))’] assume_tac wp_is_weakest_precondition
-  >> qspecl_then [‘P’, ‘Seq p1 p2’, ‘Q’] assume_tac wp_is_weakest_precondition
-  >> qspecl_then [‘Q’, ‘NONE’] assume_tac clkfree_qqn
-  >> gvs[wp_seq]
-QED
-
-Theorem seq_refinement_rule_snd:
-  clkfree_p P ∧ clkfree_q Q ∧ clkfree_p M ⇒
-  refine (HoareC P Q) (SeqC (HoareC P (λ(r,t). r = NONE ∧ M t)) (HoareC M Q))
-Proof
-  rw[refine_def]
-  >> qspecl_then [‘P’, ‘p1’, ‘(λ(r,t). r = NONE ∧ M t)’] assume_tac wp_is_weakest_precondition
-  >> qspecl_then [‘M’, ‘p2’, ‘Q’] assume_tac wp_is_weakest_precondition
-  >> qspecl_then [‘P’, ‘Seq p1 p2’, ‘Q’] assume_tac wp_is_weakest_precondition
-  >> ‘clkfree_p (wp p2 Q)’ by (metis_tac[wp_clkfree])
-  >> qspec_then ‘wp p2 Q’ assume_tac (cj 2 clkfree_pq)
-  >> qspec_then ‘M’ assume_tac (cj 2 clkfree_pq)
-  >> qspecl_then [‘M’, ‘wp p2 Q’, ‘NONE’] assume_tac pq_monotonic
-  >> qspecl_then [‘λ(r,t). r = NONE ∧ M t’, ‘λ(r,t). r = NONE ∧ wp p2 Q t’, ‘p1’]
-                 assume_tac wp_monotonic
-  >> gvs[wp_seq]
-QED
-
 Theorem seq_refinement_rule_both:
-  clkfree_p P ∧ clkfree_q Q ∧ clkfree_p M ⇒
   refine (HoareC P Q) (SeqC (HoareC P (λ(r,t). if r ≠ NONE then Q (r,t) else M t))
                             (HoareC M Q))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
-  >> qspecl_then [‘Q’, ‘M’, ‘NONE’] assume_tac clkfree_qnif
-  >> qspecl_then [‘P’, ‘p1’, ‘λ(r,t). if r ≠ NONE then Q (r,t) else M t’] assume_tac
-                 ((iffLR o cj 2) wp_is_weakest_precondition)
-  >> qspecl_then [‘M’, ‘p2’, ‘Q’] assume_tac
-                 ((iffLR o cj 2) wp_is_weakest_precondition)
-  >> qspecl_then [‘Q’, ‘M’, ‘p1’, ‘NONE’] assume_tac
-                 (iffLR wp_nif)
-  >> ‘clkfree_p (wp p2 Q)’ by (metis_tac[wp_clkfree])
-  >> qspec_then ‘wp p2 Q’ assume_tac (cj 2 clkfree_pq)
-  >> qspec_then ‘M’ assume_tac (cj 2 clkfree_pq)
-  >> qspecl_then [‘M’, ‘wp p2 Q’, ‘NONE’] assume_tac pq_monotonic
-  >> qspecl_then [‘λ(r,t). r = NONE ∧ M t’, ‘λ(r,t). r = NONE ∧ wp p2 Q t’, ‘p1’]
-                 assume_tac wp_monotonic
-  >> gvs[wp_seq]
+  >> rpt(dxrule_then assume_tac $ ((iffLR o cj 2) wp_is_weakest_precondition))
   >> rw[]
-  >> rpt (first_x_assum $ drule_then assume_tac)
-  >> Cases_on ‘wp p1 (λ(r,t). r ≠ NONE ∧ Q (r,t)) s’
+  >> first_x_assum $ dxrule_then assume_tac
+  >> dxrule_then assume_tac (iffLR wp_nif)
+  >> dxrule_then assume_tac pq_monotonic
+  >> gvs[wp_seq]
+  >> disj1_tac
+  >> irule wp_monotonic
+  >> HINT_EXISTS_TAC
   >> gvs[]
 QED
 
@@ -361,27 +248,18 @@ Proof
 QED
 
 Theorem if_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧ (∀s. P s ⇒ evaluates_to_word e s) ⇒
+  (∀s. P s ⇒ evaluates_to_word e s) ⇒
   refine (HoareC P Q) (IfC e (HoareC (λs. P s ∧ evaluates_to_true  e s) Q)
                              (HoareC (λs. P s ∧ evaluates_to_false e s) Q))
 Proof
   rw[refine_def]
-  >> qspecl_then [‘λs. P s ∧ evaluates_to_true e s’, ‘p1’, ‘Q’]
-                 assume_tac wp_is_weakest_precondition
-  >> qspecl_then [‘λs. P s ∧ evaluates_to_false e s’, ‘p2’, ‘Q’]
-                 assume_tac wp_is_weakest_precondition
-  >> qspecl_then [‘P’, ‘If e p1 p2’, ‘Q’]
-                 assume_tac wp_is_weakest_precondition
-  >> ‘clkfree_p (λs. P s ∧ evaluates_to_true e s)’ by
-     (metis_tac[clkfree_p_conj,clkfree_evaluates_to_true])
-  >> ‘clkfree_p (λs. P s ∧ evaluates_to_false e s)’ by
-     (metis_tac[clkfree_p_conj,clkfree_evaluates_to_false])
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> rpt(dxrule_then assume_tac $ ((iffLR o cj 2) wp_is_weakest_precondition))
   >> gvs[wp_if]
 QED
 
 Theorem while_refinement_rule_pan:
-  is_variant i v p ⇒
-  refine (WhileC e i v (PanC p)) (PanC (While e p))
+  refine (WhileC e i (PanC p)) (PanC (While e p))
 Proof
   rw[refine_def]
 QED
@@ -389,12 +267,6 @@ QED
 Definition while_body_pre_def:
   while_body_pre i e = λs. i s ∧ evaluates_to_true e s
 End
-
-Theorem clkfree_while_body_pre:
-  ∀i e . clkfree_p i ⇒ clkfree_p (while_body_pre i e)
-Proof
-  gvs[while_body_pre_def,clkfree_p_conj,clkfree_evaluates_to_true]
-QED
 
 Definition while_body_post_def:
   while_body_post i QB (QR : 'a state # 'a v -> bool) QE = λ(r,t). case r of
@@ -404,136 +276,53 @@ Definition while_body_post_def:
                                              | _                      => i t
 End
 
-Definition clkfree_qr_def:
-  clkfree_qr QR ⇔ ∀r s k1 k2. QR (s with clock := k1,r) ⇔ QR (s with clock := k2,r)
-End
-
-Theorem clkfree_pqr:
-  ∀P R. clkfree_p P ⇒ clkfree_qr (λ(t : 'a state,r : 'a v). P t ∧ R r)
-Proof
-  rw[clkfree_p_def,clkfree_qr_def]
-  >> first_x_assum $ qspecl_then [‘s’, ‘k1’, ‘k2’] assume_tac
-  >> gvs[]
-QED
-
-Theorem clkfree_qr_cases:
-  clkfree_qr (λ(t : 'a state,r : 'a v). T) ∧ clkfree_qr (λ(t : 'a state,r : 'a v). F)
-Proof
-  rw[]
-  >| [qspecl_then [‘λs. T’, ‘λs. T’] assume_tac clkfree_pqr,
-      qspecl_then [‘λs. F’, ‘λs. T’] assume_tac clkfree_pqr]
-  >> gvs[clkfree_p_cases]
-QED
-
-Definition clkfree_qe_def:
-  clkfree_qe QE ⇔ ∀eid e s k1 k2. QE (s with clock := k1,eid,e) ⇔ QE (s with clock := k2,eid,e)
-End
-
-Theorem clkfree_pqe:
-  ∀P R S. clkfree_p P ⇒ clkfree_qe (λ(t : 'a state,eid : mlstring,e : 'a v). P t ∧ R eid ∧ S e)
-Proof
-  rw[clkfree_p_def,clkfree_qe_def]
-  >> first_x_assum $ qspecl_then [‘s’, ‘k1’, ‘k2’] assume_tac
-  >> gvs[]
-QED
-
-Theorem clkfree_qe_cases:
-  clkfree_qe (λ(t : 'a state,eid : mlstring,e : 'a v). T) ∧
-  clkfree_qe (λ(t : 'a state,eid : mlstring,e : 'a v). F)
-Proof
-  rw[]
-  >| [qspecl_then [‘λs. T’, ‘λs. T’, ‘λs. T’] assume_tac clkfree_pqe,
-      qspecl_then [‘λs. F’, ‘λs. T’, ‘λs. T’] assume_tac clkfree_pqe]
-  >> gvs[clkfree_p_cases]
-QED
-
-Theorem clkfree_while_body_post:
-  ∀i QB QR QE. clkfree_p i ∧ clkfree_p QB ∧ clkfree_qr QR ∧ clkfree_qe QE ⇒
-               clkfree_q (while_body_post i QB QR QE)
-Proof
-  rw[while_body_post_def]
-  >> rw[clkfree_q_def]
-  >> gvs[clkfree_p_def,clkfree_qr_def,clkfree_qe_def]
-  >> elim_cases [‘r’,‘x’]
-QED
-
 Theorem while_refinement_rule:
   ∀P Q QB QR QE QF e i v.
-  clkfree_p P ∧ clkfree_q Q ∧ clkfree_p i ∧
   (∀s. P s ⇒ i s) ∧
   (∀s. i s ⇒ evaluates_to_word e s) ∧
   (∀s. i s ∧ evaluates_to_false e s ⇒ Q (NONE,s)) ∧
+  (∀s k. i s ⇒ i (s with clock := k)) ∧
   (∀t.       QB t         ⇒ Q (NONE,                  t)) ∧
   (∀t v.     QR (t,v)     ⇒ Q (SOME (Return v),       t)) ∧
   (∀t eid v. QE (t,eid,v) ⇒ Q (SOME (Exception eid v),t)) ⇒
   refine (HoareC P Q)
-         (WhileC e i v (HoareC (while_body_pre i e) (while_body_post i QB QR QE)))
+         (WhileC e i (HoareC (while_body_pre i e) (while_body_post i QB QR QE)))
 Proof
   rw[refine_def,hoare_def,while_body_pre_def,while_body_post_def]
   >> last_x_assum $ drule_then assume_tac
   >> qpat_x_assum ‘P s’ $ K all_tac
-  >> measureInduct_on ‘v s’
+  >> measureInduct_on ‘s.clock’
   >> rw[Once evaluate_def]
   >> last_x_assum $ drule_then assume_tac
   >> gvs[evaluates_to_word_def,eval_upd_clock_eq]
-  >> elim_cases [‘w = 0w’]
-  >- (last_x_assum $ qspec_then ‘s’ assume_tac
-      >> qexists ‘s.clock’
-      >> gvs[evaluates_to_false_def,state_clock_idem])
-  >> gvs[dec_clock_def,is_variant_def]
-  >> qpat_x_assum ‘∀s. i s ∧ evaluates_to_true e s ⇒ _’ $ qspec_then ‘s’ assume_tac
-  >> gvs[evaluates_to_true_def]
   >> pairarg_tac
-  >> elim_cases [‘r’]
-  >- (gvs[clkfree_p_def]
-      >> qpat_x_assum ‘∀s k1 k2. i _ ⇔ i _’ $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
-      >> gvs[state_clock_idem]
-      >> qpat_x_assum ‘∀s. i s ⇒ v _ < v _’ $ qspec_then ‘s with clock := k’ assume_tac
-      >> qpat_x_assum ‘∀s k1 k2. v _ = v _’ $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
-      >> gvs[state_clock_idem]
-      >> first_x_assum $ qspec_then ‘t’ assume_tac
+  >> Cases_on ‘w = 0w’
+  >> gvs[]
+  >- gvs[evaluates_to_false_def]
+  >- gvs[evaluates_to_false_def]
+  >> pairarg_tac
+  >> Cases_on ‘res’
+  >> gvs[dec_clock_def]
+  >> qpat_x_assum ‘∀s k. i s ⇒ _’ $ qspecl_then [‘s’, ‘s.clock -1’] assume_tac
+  >> gvs[]
+  >> qpat_x_assum ‘∀s. i s ∧ evaluates_to_true e s ⇒ _’ $ dxrule_then assume_tac
+  >> gvs[evaluates_to_true_def,eval_upd_clock_eq]
+  >- (first_x_assum $ qspec_then ‘s1’ assume_tac
       >> gvs[]
-      >> pairarg_tac
-      >> gvs[]
-      >> qspecl_then [‘t with clock := k'’, ‘t'’, ‘r’, ‘While e p’] assume_tac
-                     (GEN_ALL evaluate_min_clock)
-      >> qspecl_then [‘s with clock := k’, ‘t’, ‘NONE’, ‘p’] assume_tac
-                     (GEN_ALL evaluate_min_clock)
-      >> gvs[]
-      >> qspecl_then [‘p’, ‘s with clock := k'''’, ‘NONE’, ‘t with clock := 0’, ‘k''’] assume_tac
-                     evaluate_add_clock_eq
-      >> gvs[]
-      >> qexists ‘k'' + k''' + 1’
-      >> rpt (pairarg_tac >> gvs[])
-      >> gvs[clkfree_q_def]
-      >> last_x_assum $ qspecl_then [‘r’, ‘t'’, ‘t'.clock’, ‘0’] assume_tac
-      >> gvs[state_clock_idem])
-  >> elim_cases [‘x’]
-  >- (qexists ‘k + 1’ >> gvs[])
-  >- (gvs[clkfree_p_def]
-      >> qpat_x_assum ‘∀s k1 k2. i _ ⇔ i _’ $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
-      >> gvs[state_clock_idem]
-      >> qpat_x_assum ‘∀s. i s ⇒ v _ < v _’ $ qspec_then ‘s with clock := k’ assume_tac
-      >> qpat_x_assum ‘∀s k1 k2. v _ = v _’ $ qspecl_then [‘s’, ‘s.clock’, ‘k’] assume_tac
-      >> gvs[state_clock_idem]
-      >> first_x_assum $ qspec_then ‘t’ assume_tac
-      >> gvs[]
-      >> pairarg_tac
-      >> gvs[]
-      >> qspecl_then [‘t with clock := k'’, ‘t'’, ‘r’, ‘While e p’] assume_tac
-                     (GEN_ALL evaluate_min_clock)
-      >> qspecl_then [‘s with clock := k’, ‘t’, ‘SOME Continue’, ‘p’] assume_tac
-                     (GEN_ALL evaluate_min_clock)
-      >> gvs[]
-      >> qspecl_then [‘p’, ‘s with clock := k'''’, ‘SOME Continue’, ‘t with clock := 0’, ‘k''’] assume_tac
-                     evaluate_add_clock_eq
-      >> gvs[]
-      >> qexists ‘k'' + k''' + 1’
-      >> rpt (pairarg_tac >> gvs[])
-      >> gvs[clkfree_q_def]
-      >> last_x_assum $ qspecl_then [‘r’, ‘t'’, ‘t'.clock’, ‘0’] assume_tac
-      >> gvs[state_clock_idem])
-  >> (qexists ‘k + 1’ >> gvs[])
+      >> first_x_assum $ irule
+      >> ‘s1.clock ≤ (s with clock := s.clock - 1).clock’ suffices_by gvs[]
+      >> irule evaluate_clock
+      >> qexistsl [‘p’, ‘NONE’]
+      >> gvs[])
+  >> Cases_on ‘x’
+  >> gvs[]
+  >> first_x_assum $ qspec_then ‘s1’ assume_tac
+  >> gvs[]
+  >> first_x_assum $ irule
+  >> ‘s1.clock ≤ (s with clock := s.clock - 1).clock’ suffices_by gvs[]
+  >> irule evaluate_clock
+  >> qexistsl [‘p’, ‘SOME Continue’]
+  >> gvs[]
 QED
 
 Theorem dcc_refinement_rule:
@@ -543,7 +332,6 @@ Proof
 QED
 
 Theorem return_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧
   (∀s. P s ⇒ ∃val. evaluates_to e val s ∧
                    size_of_shape (shape_of val) ≤ 32 ∧
                    Q (SOME (Return val),empty_locals s)) ⇒
@@ -555,43 +343,39 @@ Proof
 QED
 
 Theorem annot_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧
   (∀s. P s ⇒ Q (NONE,s)) ⇒
   refine (HoareC P Q) (PanC (Annot t1 t2))
 Proof
   rw[refine_def]
-  >> qspecl_then [‘P’, ‘Annot t1 t2’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_annot]
 QED
 
 Theorem break_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧
   (∀s. P s ⇒ Q (SOME Break,s)) ⇒
   refine (HoareC P Q) (PanC (Break))
 Proof
   rw[refine_def]
-  >> qspecl_then [‘P’, ‘Break’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_break]
 QED
 
 Theorem continue_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧
   (∀s. P s ⇒ Q (SOME Continue,s)) ⇒
   refine (HoareC P Q) (PanC (Continue))
 Proof
   rw[refine_def]
-  >> qspecl_then [‘P’, ‘Continue’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_continue]
 QED
 
 Theorem raise_refinement_rule:
-  clkfree_p P ∧ clkfree_q Q ∧
   (∀s. P s ⇒ ∃sh val. has_eshape eid sh s ∧ evaluates_to e val s ∧ shape_of val = sh ∧
                       size_of_shape (shape_of val) ≤ 32 ∧
                       Q (SOME (Exception eid val),empty_locals s)) ⇒
   refine (HoareC P Q) (PanC (Raise eid e))
 Proof
   rw[refine_def]
-  >> qspecl_then [‘P’, ‘Raise eid e’, ‘Q’] assume_tac wp_is_weakest_precondition
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_raise]
 QED
