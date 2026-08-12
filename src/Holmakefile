@@ -1,1 +1,2 @@
-INCLUDES = ../cakeml/pancake ../cakeml/pancake/semantics
+INCLUDES = ../environment/cakeml/pancake ../environment/cakeml/pancake/semantics ../environment/cakeml/pancake/parser
+

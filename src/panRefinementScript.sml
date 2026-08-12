@@ -9,6 +9,13 @@ Libs BasicProvers
 
 fun elim_cases xs = EVERY (map (fn x => Cases_on x >> gvs[]) xs);
 
+local open OpenTheoryMap
+  val ns = ["PanRefinement"]
+in
+  fun ot0 x y = OpenTheory_const_name{const={Thy="panRefinement",Name=x},name=(ns,y)}
+  fun ot x = ot0 x x
+end 
+    
 Theorem pq_monotonic:
   ∀(A : ('a,'ffi) state -> bool) B (res : 'a result option).
    (∀s. A s ⇒ B s) ⇒ (∀s. (λ(r,t). r = res ∧ A t) s ⇒ (λ(r,t). r = res ∧ B t) s)
@@ -28,7 +35,6 @@ Datatype:
                        Contract
            | DecCallC  varname shape funname ('a panLang$exp list) Contract
            | PanC      ('a panLang$prog)
-           | DCC
 End
 
 Definition sat_def[simp]:
@@ -39,7 +45,6 @@ Definition sat_def[simp]:
   sat (WhileC l i c)           (While r p)             = (l = r ∧ sat c p) ∧
   sat (DecCallC vl sl fl el c) (DecCall vr sr fr er p) = (vl = vr ∧ sl = sr ∧ fl = fr ∧ el = er ∧ sat c p) ∧
   sat (PanC l)                 r                       = (l = r) ∧
-  sat DCC                      _                       = T ∧
   sat _                        _                       = F
 End
 
@@ -54,55 +59,66 @@ Proof
 QED
 
 Definition refine_def:
-  refine (c1 : ('a, 'ffi) Contract) (c2 : ('a, 'ffi) Contract) ⇔ ∀prog. sat c2 prog ⇒ sat c1 prog
+  $refine (c1 : ('a, 'ffi) Contract) (c2 : ('a, 'ffi) Contract) ⇔ ∀prog. sat c2 prog ⇒ sat c1 prog
 End
 
+val _ = set_fixity "refine" (Infix(NONASSOC, 450));
+val _ = Parse.Unicode.unicode_version { u = "\226\138\145", tmnm = "refine" };
+val _ = TeX_notation {hol = "refine", TeX = ("\\HOLTokenSubmap{}", 1)}
+val _ = ot0 "refine" "refine"
+
 Theorem refine_reflexive:
-  ∀A. refine A A
+  ∀A. A refine A
 Proof
   rw[refine_def]
 QED
 
 Theorem refine_transitive:
-  ∀A B C. refine A B ∧ refine B C ⇒ refine A C
+  ∀A B C. A refine B ∧ B refine C ⇒ A refine C
 Proof
   rw[refine_def]
 QED
 
 Theorem refine_monotonic_dec:
-  ∀A B v sh exp. refine A B ⇒ refine (DecC v sh exp A) (DecC v sh exp B)
+  ∀A B v sh exp. A refine B ⇒ (DecC v sh exp A) refine (DecC v sh exp B)
 Proof
   rw[refine_def]
 QED
 
 Theorem refine_monotonic_seq:
-  ∀A B C. refine A B ⇒ refine (SeqC A C) (SeqC B C) ∧
-                       refine (SeqC C A) (SeqC C B)
+  ∀A B C. A refine B ⇒ (SeqC A C) refine (SeqC B C) ∧
+                       (SeqC C A) refine (SeqC C B)
 Proof
   rw[refine_def]
 QED
 
 Theorem refine_monotonic_if:
-  ∀A B C e. refine A B ⇒ refine (IfC e A C) (IfC e B C) ∧
-                         refine (IfC e C A) (IfC e C B)
+  ∀A B C e. A refine B ⇒ (IfC e A C) refine (IfC e B C) ∧
+                         (IfC e C A) refine (IfC e C B)
 Proof
   rw[refine_def]
 QED
 
 Theorem refine_monotonic_while:
-  ∀A B e i. refine A B ⇒ refine (WhileC e i A) (WhileC e i B)
+  ∀A B e i. A refine B ⇒ (WhileC e i A) refine (WhileC e i B)
 Proof
   rw[refine_def]
 QED
 
 Theorem refine_monotonic_deccall:
-  ∀A B v s f e. refine A B ⇒ refine (DecCallC v s f e A) (DecCallC v s f e B)
+  ∀A B v s f e. A refine B ⇒ (DecCallC v s f e A) refine (DecCallC v s f e B)
 Proof
   rw[refine_def]
 QED
 
+Theorem refine_to_prog_hoare:
+  ∀P prog Q. (HoareC P Q) refine (PanC prog) ⇒ hoare P prog Q
+Proof
+  rw[refine_def]
+QED
+        
 Theorem strengthen_postcondition_refinement_rule:
-  (∀s. Q' s ⇒ Q s) ⇒ refine (HoareC P Q) (HoareC P Q')
+  Q' ⇛ Q ⇒ (HoareC P Q) refine (HoareC P Q')
 Proof
   rw[refine_def,hoare_def]
   >> first_x_assum $ drule_then assume_tac
@@ -111,13 +127,13 @@ Proof
 QED
 
 Theorem weaken_precondition_refinement_rule:
-  (∀s. P s ⇒ P' s) ⇒ refine (HoareC P Q) (HoareC P' Q)
+  P ⇛ P' ⇒ (HoareC P Q) refine (HoareC P' Q)
 Proof
   rw[refine_def,hoare_def]
 QED
 
 Theorem both_pre_post_refinement_rule:
-  (∀s. P s ⇒ P' s) ∧ (∀s. Q' s ⇒ Q s) ⇒ refine (HoareC P Q) (HoareC P' Q')
+  (∀s. P s ⇒ P' s) ∧ (∀s. Q' s ⇒ Q s) ⇒ (HoareC P Q) refine (HoareC P' Q')
 Proof
   rw[]
   >> irule refine_transitive
@@ -126,8 +142,8 @@ Proof
 QED
 
 Theorem skip_refinement_rule:
-  (∀s. P s ⇒ Q (NONE,s)) ⇒
-  refine (HoareC P Q) (PanC Skip)
+  P ⇛ CURRY Q NONE ⇒
+  (HoareC P Q) refine (PanC Skip)
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
@@ -135,64 +151,138 @@ Proof
 QED
 
 Theorem dec_refinement_rule_pan:
-  refine (DecC v sh src (PanC prog)) (PanC (Dec v sh src prog))
+  (DecC v sh src (PanC prog)) refine (PanC (Dec v sh src prog))
 Proof
   rw[refine_def]
 QED
 
-Theorem dec_refinement_rule_varfree:
-  varfree_p v P ∧
-  varfree_q v Q ∧
-  ¬MEM v (var_exp src) ∧
-  (∀s. P s ⇒ evaluates src s) ⇒
-  refine (HoareC P Q)
-         (DecC v sh src (HoareC (λs. P s ∧ var_eq Local v src s) Q))
+Theorem MEM_IN_LIST_TO_SET:
+  MEM e l ⇒ set l e
 Proof
-  rw[refine_def]
+  Induct_on ‘l’
+  >> gvs[IN_DEF]
+QED
+
+Theorem varnotset_eval_thm:
+  ∀P src v.
+  P ⇛ (λs. v ∉ FDOM s.locals) ∧
+  P ⇛ evaluates src ∧
+  (∃s. P s) ⇒
+  ¬MEM v (var_exp src)
+Proof
+  rw[IN_DEF]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> last_x_assum $ kall_tac
+  >> spose_not_then assume_tac
+  >> last_x_assum $ mp_tac
+  >> gvs[evaluates_def]
+  >> ‘eval s src = NONE’ suffices_by gvs[]
+  >> rpt (pop_assum $ mp_tac)
+  >> qid_spec_tac ‘src’
+  >> qid_spec_tac ‘s’
+  >> recInduct eval_ind    
+  >> rw[]
+  >> gvs[panLangTheory.var_exp_def,eval_def,finite_mapTheory.FLOOKUP_DEF,IN_DEF,AllCaseEqs()]
+  >>~- ([‘eval _ _ = NONE ∨ _’],(Cases_on ‘eval s e1’ >> gvs[] >> Cases_on ‘x’ >> gvs[]))
+  >> Induct_on ‘es’
+  >> rw[]
+  >- (‘eval s h = NONE’ suffices_by gvs[]
+      >> first_x_assum $ irule
+      >> gvs[MEM_IN_LIST_TO_SET])
+  >- (Cases_on ‘eval s h’
+      >> gvs[]
+      >> first_x_assum $ irule
+      >> gvs[MEM_IN_LIST_TO_SET])
+  >- (‘eval s h = NONE’ suffices_by gvs[]
+      >> first_x_assum $ irule
+      >> gvs[MEM_IN_LIST_TO_SET])
+  >- (‘set (FLAT (MAP (λa. var_exp a) es)) v’ by gvs[MEM_IN_LIST_TO_SET]
+      >> gvs[]
+      >> Cases_on ‘eval s h’
+      >> gvs[]
+      >> Cases_on ‘x’
+      >> gvs[]
+      >> Cases_on ‘w’
+      >> gvs[]
+      >> Cases_on ‘op’
+      >> gvs[wordLangTheory.word_op_def,AllCaseEqs()]
+      >> Cases_on ‘es’
+      >> gvs[listTheory.OPT_MMAP_def]
+      >- (qpat_x_assum ‘eval s h' = _’ $ mp_tac >> ‘eval s h' = NONE’ suffices_by gvs[] >> first_x_assum $ irule >> gvs[MEM_IN_LIST_TO_SET])
+      >> Cases_on ‘t’
+      >> gvs[listTheory.OPT_MMAP_def])
+  >- (‘eval s h = NONE’ suffices_by gvs[]
+      >> first_x_assum $ irule
+      >> gvs[MEM_IN_LIST_TO_SET])
+  >- (Cases_on ‘eval s h’
+      >> gvs[]
+      >> ‘set (FLAT (MAP (λa. var_exp a) es)) v’ by gvs[MEM_IN_LIST_TO_SET]
+      >> gvs[]
+      >> Cases_on ‘x’
+      >> gvs[]
+      >> Cases_on ‘w’
+      >> gvs[]
+      >> Cases_on ‘op’
+      >> gvs[]
+      >> Cases_on ‘MAP (λw. case w of ValWord n => n | Struct v1 => ARB) ws’
+      >> gvs[pan_op_def]
+      >> Cases_on ‘t’
+      >> gvs[pan_op_def]
+      >> Cases_on ‘es’
+      >> gvs[listTheory.OPT_MMAP_def]
+      >- (qpat_x_assum ‘eval s h' = _’ $ mp_tac >> ‘eval s h' = NONE’ suffices_by gvs[] >> first_x_assum $ irule >> gvs[MEM_IN_LIST_TO_SET])
+      >> Cases_on ‘t’
+      >> gvs[listTheory.OPT_MMAP_def])
+QED
+
+Theorem varfree_eval_thm:
+  varfree_p v P ∧
+  P ⇛ evaluates src ∧
+  (∃s. P s) ⇒
+  ¬MEM v (var_exp src)
+Proof
+  rw[]
+  >> irule varnotset_eval_thm
+  >> qexists ‘(λs. P s ∧ v ∉ FDOM s.locals)’
+  >> rw[]
+  >> qexists ‘s with locals := s.locals \\ v’
+  >> gvs[varfree_p_def]
+QED
+
+Definition dec_refinement_rule_rhs[simp]:
+  DecBC P v src Q = HoareC (λs. P (s with locals := s.locals \\ v) ∧ var_eq Local v src s)
+                           (λ(r,t). Q (r,t with locals := t.locals \\ v))
+End
+
+Theorem dec_refinement_rule:
+  P ⇛ (λs. v ∉ FDOM s.locals) ∧
+  P ⇛ evaluates src ⇒
+  (HoareC P Q) refine
+         (DecC v sh src (DecBC P v src Q))
+Proof
+  rw[refine_def,IN_DEF]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> dxrule_then assume_tac $ ((iffLR o cj 2) wp_is_weakest_precondition)
   >> rw[]
-  >> last_x_assum $ drule_then assume_tac
-  >> gvs[wp_dec,evaluates_def]
-  >> last_x_assum $ qspec_then ‘s with locals := s.locals |+ (v,v')’ assume_tac
-  >> gvs[varfree_p_def,var_eq_def,finite_mapTheory.FLOOKUP_UPDATE,eval_fresh_var]
-  >> gvs[subst_def]
-  >> qsuff_tac ‘reset_subst v s Q = Q’
-  >- rw[]
+  >> ‘¬MEM v (var_exp src)’ by (irule varnotset_eval_thm >> qexists ‘P’ >> gvs[IN_DEF] >> qexists ‘s’ >> gvs[])
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> gvs[wp_dec,subst_def,evaluates_def]
+  >> first_x_assum $ qspec_then ‘s with locals := s.locals |+ (v,v')’ assume_tac
+  >> ‘s with locals := s.locals \\ v = s’ by gvs[finite_mapTheory.DOMSUB_NOT_IN_DOM,IN_DEF,
+                                                 state_component_equality]
+  >> gvs[var_eq_def,finite_mapTheory.FLOOKUP_UPDATE,eval_fresh_var]
+  >> ‘reset_subst v s Q = (λ(r,t). Q (r,t with locals := t.locals \\ v))’ suffices_by gvs[]
   >> gvs[FUN_EQ_THM]
-  >> PairCases
-  >> iff_tac
-  >> gvs[reset_subst_def]
-  >> Cases_on ‘FLOOKUP s.locals v’
-  >> gvs[res_var_def,varfree_q_def]
-  >> Cases_on ‘FLOOKUP x1.locals v’
   >> rw[]
-  >- (‘x1 with locals := x1.locals \\ v = x1’ suffices_by metis_tac[]
-      >> ‘x1.locals \\ v = x1.locals’ suffices_by gvs[state_component_equality]
-      >> gvs[finite_mapTheory.flookup_thm,finite_mapTheory.DOMSUB_NOT_IN_DOM])
-  >- (first_x_assum $ qspecl_then [‘x0’, ‘x1 with locals := x1.locals \\ v’, ‘x’] assume_tac
-      >> gvs[]
-      >> ‘x1 with locals := x1.locals |+ (v,x) = x1’ suffices_by metis_tac[]
-      >> ‘x1.locals |+ (v,x) = x1.locals’ suffices_by gvs[state_component_equality]
-      >> irule finite_mapTheory.FUPDATE_ELIM
-      >> gvs[finite_mapTheory.flookup_thm])
-  >- (first_x_assum $ qspecl_then [‘x0’, ‘x1 with locals := x1.locals |+ (v,x)’, ‘x’] assume_tac
-      >> gvs[]
-      >> ‘x1 with locals := x1.locals \\ v = x1’ suffices_by metis_tac[]
-      >> ‘x1.locals \\ v = x1.locals’ suffices_by gvs[state_component_equality]
-      >> gvs[finite_mapTheory.flookup_thm,finite_mapTheory.DOMSUB_NOT_IN_DOM])
-  >> first_x_assum $ qspecl_then [‘x0’, ‘x1 with locals := x1.locals |+ (v,x)’, ‘x'’] assume_tac
-  >> gvs[]
-  >> ‘x1 with locals := x1.locals |+ (v,x') = x1’ suffices_by metis_tac[]
-  >> ‘x1.locals |+ (v,x') = x1.locals’ suffices_by gvs[state_component_equality]
-  >> irule finite_mapTheory.FUPDATE_ELIM
-  >> gvs[finite_mapTheory.flookup_thm]
+  >> PairCases_on ‘x’
+  >> rw[reset_subst_def,IN_DEF,finite_mapTheory.FLOOKUP_DEF,res_var_def]
 QED
-
+        
 Theorem assign_refinement_rule:
-  (∀s. P s ⇒ valid_value k v src s ∧
-             subst k v src (λs. Q (NONE,s)) s) ⇒
-  refine (HoareC P Q) (PanC (Assign k v src))
+  P ⇛ evaluates src ∧
+  P ⇛ valid_value k v src ∧
+  P ⇛ subst k v src (CURRY Q NONE) ⇒
+  (HoareC P Q) refine (PanC (Assign k v src))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
@@ -200,11 +290,11 @@ Proof
 QED
 
 Theorem store_refinement_rule:
-  (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
-                        evaluates_to src val s ∧
-                        addr_in_mem addr val s ∧
-                        mem_subst addr val (λs. Q (NONE,s)) s) ⇒
-  refine (HoareC P Q) (PanC (Store dest src))
+  P ⇛ evaluates_to_word dest ∧
+  P ⇛ evaluates src ∧
+  P ⇛ addr_in_mem (the_eval_vw dest) (the_eval src) ∧
+  P ⇛ mem_subst (the_eval_vw dest) (the_eval src) (CURRY Q NONE) ⇒
+  (HoareC P Q) refine (PanC (Store dest src))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
@@ -212,11 +302,11 @@ Proof
 QED
 
 Theorem store32_refinement_rule:
-  (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
-                        evaluates_to src (ValWord val) s ∧
-                        addr_in_mem_32 addr val s ∧
-                        mem_subst_32 addr val (λs. Q (NONE,s)) s) ⇒
-  refine (HoareC P Q) (PanC (Store32 dest src))
+  P ⇛ evaluates_to_word dest ∧
+  P ⇛ evaluates_to_word src ∧
+  P ⇛ addr_in_mem32 (the_eval_vw dest) ∧
+  P ⇛ mem_subst32 (the_eval_vw dest) (the_eval_vw src) (CURRY Q NONE) ⇒
+  (HoareC P Q) refine (PanC (Store32 dest src))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
@@ -224,104 +314,119 @@ Proof
 QED
 
 Theorem storebyte_refinement_rule:
-  (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
-                        evaluates_to src (ValWord val) s ∧
-                        addr_in_mem_byte addr val s ∧
-                        mem_subst_byte addr val (λs. Q (NONE,s)) s) ⇒
-  refine (HoareC P Q) (PanC (StoreByte dest src))
+  P ⇛ evaluates_to_word dest ∧
+  P ⇛ evaluates_to_word src ∧
+  P ⇛ addr_in_mem8 (the_eval_vw dest) ∧
+  P ⇛ mem_subst8 (the_eval_vw dest) (the_eval_vw src) (CURRY Q NONE) ⇒
+  (HoareC P Q) refine (PanC (StoreByte dest src))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_storebyte]
 QED
 
+Definition op_align_def[simp]:
+  op_align op w s = if op = OpW then (w s) else (byte_align (w s))
+End
+
+Definition ffi_shmemload_def[simp]:
+  ffi_shmemload op vk v src Q s = hoareFFI s
+                    (SharedMem MappedRead)
+                    [n2w (nb_op op)]
+                    (word_to_bytes (the_eval_vw src s) F)
+                    (λt output. Q (NONE,set_kvar vk v (ValWord (word_of_bytes F 0w output)) s with ffi := t))
+                    (λoutcome. Q (SOME (FinalFFI outcome),empty_locals s))
+End
+
 Theorem shmemload_refinement_rule:
-  (∀s. P s ⇒ (∃w. lookup_kvar s vk v = SOME (ValWord w))) ∧
-  (∀s. P s ⇒ PF s.ffi) ∧
-  (∀s. P s ⇒ ∃addr. evaluates_to src (ValWord addr) s ∧
-                    s.sh_memaddrs (if op = OpW then addr else byte_align addr) ∧
-                    hoareFFI PF (SharedMem MappedRead) [n2w (nb_op op)] (word_to_bytes addr F)
-                             (λt output.
-                               Q (NONE,set_kvar vk v (ValWord (word_of_bytes F 0w output)) s with ffi := t))
-                             (λoutcome. Q (SOME (FinalFFI outcome),empty_locals s))) ⇒
-  refine (HoareC P Q) (PanC (ShMemLoad op vk v src))
+  P ⇛ has_kvar_vw vk v ∧
+  P ⇛ evaluates_to_word src ∧
+  P ⇛ in_sh_memaddrs (op_align op (the_eval_vw src)) ∧
+  P ⇛ ffi_shmemload op vk v src Q ⇒
+  (HoareC P Q) refine (PanC (ShMemLoad op vk v src))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
-  >> gvs[wp_shmemload]
+  >> gvs[wp_shmemload,has_kvar_vw_def,in_sh_memaddrs_def,evaluates_to_word_def,evaluates_to_def,IN_DEF]
   >> rw[]
-  >> first_x_assum $ drule_then assume_tac
-  >> gvs[]
-  >> HINT_EXISTS_TAC
-  >> gvs[]
-  >> irule ((iffLR o cj 2) wpFFI_is_weakest_precondition)
-  >> first_x_assum $ drule_then assume_tac
-  >> HINT_EXISTS_TAC
-  >> gvs[]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> gvs[the_eval_vw_def,the_eval_def]
 QED
 
+Definition ffi_shmemstore_def[simp]:
+  ffi_shmemstore op vk v src dest Q s = hoareFFI s
+                    (SharedMem MappedWrite)
+                    [n2w (nb_op op)]
+                    (if op = OpW then
+                        word_to_bytes (the_eval_vw src s) F ++ word_to_bytes (the_eval_vw dest s) F
+                     else
+                        (TAKE (nb_op op) (word_to_bytes (the_eval_vw src s) F) ++ word_to_bytes (the_eval_vw dest s) F))
+                    (λt output. Q (NONE,s with ffi := t))
+                    (λoutcome. Q (SOME (FinalFFI outcome),s))
+End
+
 Theorem shmemstore_refinement_rule:
-  (∀s. P s ⇒ PF s.ffi) ∧
-  (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
-                        evaluates_to src (ValWord val) s ∧
-                        s.sh_memaddrs (if op = OpW then addr else byte_align addr) ∧
-                        hoareFFI PF (SharedMem MappedWrite) [n2w (nb_op op)]
-                                 (if op = OpW then
-                                    word_to_bytes val F ++ word_to_bytes addr F
-                                  else
-                                    (TAKE (nb_op op) (word_to_bytes val F) ++ word_to_bytes addr F))
-                                 (λt output. Q (NONE,s with ffi := t))
-                                 (λoutcome. Q (SOME (FinalFFI outcome),s))) ⇒
-  refine (HoareC P Q) (PanC (ShMemStore op dest src))
+  P ⇛ evaluates_to_word dest ∧
+  P ⇛ evaluates_to_word src ∧
+  P ⇛ in_sh_memaddrs (op_align op (the_eval_vw dest)) ∧
+  P ⇛ ffi_shmemstore op vk v src dest Q ⇒
+  (HoareC P Q) refine (PanC (ShMemStore op dest src))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
-  >> gvs[wp_shmemstore]
+  >> gvs[wp_shmemstore,has_kvar_vw_def,in_sh_memaddrs_def,evaluates_to_word_def,evaluates_to_def,IN_DEF]
   >> rw[]
-  >> first_x_assum $ drule_then assume_tac
-  >> gvs[]
-  >> qexistsl [‘addr’, ‘val’]
-  >> gvs[]
-  >> irule ((iffLR o cj 2) wpFFI_is_weakest_precondition)
-  >> first_x_assum $ drule_then assume_tac
-  >> HINT_EXISTS_TAC
-  >> gvs[]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> gvs[the_eval_vw_def,the_eval_def]
 QED
 
 Theorem seq_refinement_rule_pan:
-  refine (SeqC (PanC l) (PanC r)) (PanC (Seq l r))
+  (SeqC (PanC l) (PanC r)) refine (PanC (Seq l r))
 Proof
   rw[refine_def]
 QED
 
-Theorem seq_refinement_rule_both:
-  refine (HoareC P Q) (SeqC (HoareC P (λ(r,t). if r ≠ NONE then Q (r,t) else M t))
+Definition seq_refinement_rule_rhs[simp]:
+  SeqBC P M Q = HoareC P (λ(r,t). if r ≠ NONE then Q (r,t) else M t)
+End                       
+        
+Theorem seq_refinement_rule:
+  (HoareC P Q) refine (SeqC (SeqBC P M Q)
                             (HoareC M Q))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> rpt(dxrule_then assume_tac $ ((iffLR o cj 2) wp_is_weakest_precondition))
   >> rw[]
+  >> gvs[]
   >> first_x_assum $ dxrule_then assume_tac
   >> dxrule_then assume_tac (iffLR wp_nif)
   >> dxrule_then assume_tac pq_monotonic
   >> gvs[wp_seq]
   >> disj1_tac
-  >> irule wp_monotonic
+  >> irule (SRULE [] wp_monotonic)
   >> HINT_EXISTS_TAC
   >> gvs[]
 QED
 
 Theorem if_refinement_rule_pan:
-  refine (IfC e (PanC l) (PanC r)) (PanC (If e l r))
+  (IfC e (PanC l) (PanC r)) refine (PanC (If e l r))
 Proof
   rw[refine_def]
 QED
 
+Definition if_refinement_rule_rhs_T[simp]:
+  IfBCT P e Q = HoareC (λs. P s ∧ evaluates_to_true e s) Q
+End
+        
+Definition if_refinement_rule_rhs_F[simp]:
+  IfBCF P e Q = HoareC (λs. P s ∧ evaluates_to_false e s) Q
+End
+        
 Theorem if_refinement_rule:
-  (∀s. P s ⇒ evaluates_to_word e s) ⇒
-  refine (HoareC P Q) (IfC e (HoareC (λs. P s ∧ evaluates_to_true  e s) Q)
-                             (HoareC (λs. P s ∧ evaluates_to_false e s) Q))
+  P ⇛ evaluates_to_word e ⇒
+  (HoareC P Q) refine (IfC e (IfBCT P e Q)
+                             (IfBCF P e Q))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
@@ -330,7 +435,7 @@ Proof
 QED
 
 Theorem while_refinement_rule_pan:
-  refine (WhileC e i (PanC p)) (PanC (While e p))
+  (WhileC e i (PanC p)) refine (PanC (While e p))
 Proof
   rw[refine_def]
 QED
@@ -347,19 +452,23 @@ Definition while_body_post_def:
                                              | SOME (FinalFFI res)    => QF (t,res)
                                              | _                      => i t
 End
+        
+Definition while_refinement_rule_rhs[simp]:
+  WhileBC e i QB QR QE QF = HoareC (while_body_pre i e) (while_body_post i QB QR QE QF)
+End        
 
 Theorem while_refinement_rule:
   ∀P Q QB QR QE QF e i v.
-  (∀s. P s ⇒ i s) ∧
-  (∀s. i s ⇒ evaluates_to_word e s) ∧
-  (∀s. i s ∧ evaluates_to_false e s ⇒ Q (NONE,s)) ∧
+  P ⇛ i ∧
+  i ⇛ evaluates_to_word e ∧
+  (λs. i s ∧ evaluates_to_false e s) ⇛ CURRY Q NONE ∧
   (∀s k. i s ⇒ i (s with clock := k)) ∧
-  (∀t.       QB t         ⇒ Q (NONE,                  t)) ∧
+  QB ⇛ CURRY Q NONE ∧
   (∀t v.     QR (t,v)     ⇒ Q (SOME (Return v),       t)) ∧
   (∀t eid v. QE (t,eid,v) ⇒ Q (SOME (Exception eid v),t)) ∧
   (∀t res.   QF (t,res)   ⇒ Q (SOME (FinalFFI res),   t)) ⇒
-  refine (HoareC P Q)
-         (WhileC e i (HoareC (while_body_pre i e) (while_body_post i QB QR QE QF)))
+  (HoareC P Q) refine
+         (WhileC e i (WhileBC e i QB QR QE QF))
 Proof
   rw[refine_def,hoare_def,while_body_pre_def,while_body_post_def]
   >> last_x_assum $ drule_then assume_tac
@@ -382,6 +491,7 @@ Proof
   >> gvs[evaluates_to_true_def,eval_upd_clock_eq]
   >- (first_x_assum $ qspec_then ‘s1’ assume_tac
       >> gvs[]
+      >> strip_tac
       >> first_x_assum $ irule
       >> ‘s1.clock ≤ (s with clock := s.clock - 1).clock’ suffices_by gvs[]
       >> irule evaluate_clock
@@ -391,6 +501,7 @@ Proof
   >> gvs[]
   >> first_x_assum $ qspec_then ‘s1’ assume_tac
   >> gvs[]
+  >> strip_tac
   >> first_x_assum $ irule
   >> ‘s1.clock ≤ (s with clock := s.clock - 1).clock’ suffices_by gvs[]
   >> irule evaluate_clock
@@ -398,26 +509,23 @@ Proof
   >> gvs[]
 QED
 
-Theorem dcc_refinement_rule:
-  refine DCC (PanC prog)
-Proof
-  rw[refine_def]
-QED
-
 Theorem return_refinement_rule:
-  (∀s. P s ⇒ ∃val. evaluates_to e val s ∧
-                   size_of_shape (shape_of val) ≤ 32 ∧
-                   Q (SOME (Return val),empty_locals s)) ⇒
-  refine (HoareC P Q) (PanC (Return e))
+  P ⇛ evaluates e ∧
+  P ⇛ (λs. size_of_shape (shape_of (the_eval e s)) ≤ 32) ∧
+  P ⇛ (λs. Q (SOME (Return (the_eval e s)),empty_locals s)) ⇒
+  (HoareC P Q) refine (PanC (Return e))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
-  >> gvs[wp_return]
+  >> gvs[wp_return,evaluates_def,evaluates_to_def]
+  >> rw[]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> gvs[the_eval_def]
 QED
 
 Theorem annot_refinement_rule:
-  (∀s. P s ⇒ Q (NONE,s)) ⇒
-  refine (HoareC P Q) (PanC (Annot t1 t2))
+  P ⇛ CURRY Q NONE ⇒
+  (HoareC P Q) refine (PanC (Annot t1 t2))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
@@ -425,8 +533,8 @@ Proof
 QED
 
 Theorem break_refinement_rule:
-  (∀s. P s ⇒ Q (SOME Break,s)) ⇒
-  refine (HoareC P Q) (PanC (Break))
+  P ⇛ CURRY Q (SOME Break) ⇒
+  (HoareC P Q) refine (PanC (Break))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
@@ -434,8 +542,8 @@ Proof
 QED
 
 Theorem continue_refinement_rule:
-  (∀s. P s ⇒ Q (SOME Continue,s)) ⇒
-  refine (HoareC P Q) (PanC (Continue))
+  P ⇛ CURRY Q (SOME Continue) ⇒
+  (HoareC P Q) refine (PanC (Continue))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
@@ -443,14 +551,18 @@ Proof
 QED
 
 Theorem raise_refinement_rule:
-  (∀s. P s ⇒ ∃sh val. has_eshape eid sh s ∧ evaluates_to e val s ∧ shape_of val = sh ∧
-                      size_of_shape (shape_of val) ≤ 32 ∧
-                      Q (SOME (Exception eid val),empty_locals s)) ⇒
-  refine (HoareC P Q) (PanC (Raise eid e))
+  P ⇛ evaluates e ∧
+  P ⇛ (λs. has_eshape eid (shape_of (the_eval e s)) s) ∧
+  P ⇛ (λs. size_of_shape (shape_of (the_eval e s)) ≤ 32) ∧
+  P ⇛ (λs. Q (SOME (Exception eid (the_eval e s)),empty_locals s)) ⇒
+  (HoareC P Q) refine (PanC (Raise eid e))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
-  >> gvs[wp_raise]
+  >> gvs[wp_raise,evaluates_def,evaluates_to_def]
+  >> rw[]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> gvs[the_eval_def]
 QED
 
 Theorem pred_upd_simp[simp]:
@@ -462,232 +574,297 @@ Proof
   >> gvs[state_component_equality]
 QED
 
+Definition tailcall_contract_def[simp]:
+  tailcall_contract P fname argexps Q s = let (p,lcls) = THE (lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)))
+           in hoare (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
+                    p
+                    (λ(r,t). r ≠ SOME Continue ∧ r ≠ SOME Break ∧ r ≠ NONE ∧ Q (r,empty_locals t))
+End
+
+Definition evaluates_all_def[simp]:
+  evaluates_all exps s ⇔ IS_SOME (OPT_MMAP (eval s) exps)
+End
+
+Definition the_evals_def[simp]:
+  the_evals exps s = THE (OPT_MMAP (eval s) exps)
+End
+
+Definition has_function[simp]:
+  has_function fname args s ⇔ IS_SOME (lookup_code s.code fname (the_evals args s))
+End
+        
 Theorem tailcall_refinement_rule:
-  (∀s. P s ⇒ ∃arg p lcls. IS_SOME (OPT_MMAP (eval s) argexps) ∧
-                          lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)) = SOME (p,lcls) ∧
-                          hoare
-                            (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
-                            p
-                            (λ(r,t). r ≠ SOME Continue ∧ r ≠ SOME Break ∧ r ≠ NONE ∧ Q (r,empty_locals t))) ⇒
-  refine (HoareC P Q) (PanC (TailCall fname argexps))
+  P ⇛ evaluates_all argexps ∧
+  P ⇛ has_function fname argexps ∧
+  P ⇛ tailcall_contract P fname argexps Q ⇒
+  (HoareC P Q) refine (PanC (TailCall fname argexps))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_tailcall]
   >> rw[]
-  >> first_x_assum $ drule_then assume_tac
-  >> qexists ‘THE (OPT_MMAP (eval s) argexps)’
-  >> gvs[optionTheory.option_CLAUSES]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> gvs[optionTheory.IS_SOME_EXISTS]
+  >> PairCases_on ‘x’
+  >> gvs[]
   >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
   >> disj2_tac
-  >> first_x_assum $ irule
   >> gvs[]
+  >> first_x_assum $ irule
+  >> gvs[dec_clock_def]
+  >> ‘s with <|locals := s.locals; clock := s.clock|> = s’ suffices_by gvs[]
+  >> gvs[state_component_equality]
 QED
 
+Definition assigncall_contract_def[simp]:
+  assigncall_contract P fname argexps k v Q s = let (p,lcls) = THE (lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)))
+           in hoare (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
+                    p
+                    (λ(r,t). case r of
+                             | SOME (Return rv)         => is_valid_value (case k of Local => s.locals | Global => s.globals) v rv ∧
+                                                           Q (NONE,set_kvar k v rv (t with locals := s.locals))
+                             | SOME (Exception eid exn) => Q (SOME (Exception eid exn),empty_locals t)
+                             | SOME (FinalFFI f)        => Q (SOME (FinalFFI f),empty_locals t)
+                             | _                        => F)
+End
+        
 Theorem assigncall_refinement_rule:
-  (∀s. P s ⇒ ∃arg p lcls. IS_SOME (OPT_MMAP (eval s) argexps) ∧
-                          lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)) = SOME (p,lcls) ∧
-                          hoare
-                            (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
-                            p
-                            (λ(r,t). case r of
-                                     | SOME (Return rv)         => is_valid_value (case k of Local => s.locals | Global => s.globals) v rv ∧
-                                                                   Q (NONE,set_kvar k v rv (t with locals := s.locals))
-                                     | SOME (Exception eid exn) => Q (SOME (Exception eid exn),empty_locals t)
-                                     | SOME (FinalFFI f)        => Q (SOME (FinalFFI f),empty_locals t)
-                                     | _                        => F)) ⇒
-  refine (HoareC P Q) (PanC (AssignCall (k,v) NONE fname argexps))
+  P ⇛ evaluates_all argexps ∧
+  P ⇛ has_function fname argexps ∧
+  P ⇛ assigncall_contract P fname argexps k v Q ⇒
+  (HoareC P Q) refine (PanC (AssignCall (k,v) NONE fname argexps))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_assigncall]
   >> rw[]
-  >> first_x_assum $ drule_then assume_tac
-  >> qexists ‘THE (OPT_MMAP (eval s) argexps)’
-  >> gvs[optionTheory.option_CLAUSES]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> gvs[optionTheory.IS_SOME_EXISTS]
+  >> PairCases_on ‘x’
+  >> gvs[]
   >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
   >> disj2_tac
-  >> first_x_assum $ irule
   >> gvs[]
+  >> first_x_assum $ irule
+  >> gvs[dec_clock_def]
+  >> ‘s with <|locals := s.locals; clock := s.clock|> = s’ suffices_by gvs[]
+  >> gvs[state_component_equality]
 QED
+
+Definition assigncall_handler_contract_def[simp]:
+  assigncall_handler_contract P fname argexps k v (eid,evar,hp) Q s =
+           let (p,lcls) = THE (lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)))
+           in hoare (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
+                    p
+                    (λ(r,t). case r of
+                             | SOME (Return rv)          => is_valid_value (case k of Local => s.locals | Global => s.globals) v rv ∧
+                                                            Q (NONE,set_kvar k v rv (t with locals := s.locals))
+                             | SOME (Exception eid' exn) => if eid' = eid then
+                                                              FLOOKUP s.eshapes eid = SOME (shape_of exn) ∧
+                                                              is_valid_value s.locals evar exn ∧
+                                                              hoare (λs'. s' = set_var evar exn (s' with locals := s.locals)) hp Q
+                                                            else
+                                                              Q (SOME (Exception eid' exn),empty_locals t)
+                             | SOME (FinalFFI f)         => Q (SOME (FinalFFI f),empty_locals t)
+                             | _                         => F)
+End
 
 Theorem assigncall_handler_refinement_rule:
-  (∀s. P s ⇒ ∃arg p lcls. IS_SOME (OPT_MMAP (eval s) argexps) ∧
-                          lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)) = SOME (p,lcls) ∧
-                          hoare
-                            (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
-                            p
-                            (λ(r,t). case r of
-                                     | SOME (Return rv)          => is_valid_value (case k of Local => s.locals | Global => s.globals) v rv ∧
-                                                                    Q (NONE,set_kvar k v rv (t with locals := s.locals))
-                                     | SOME (Exception eid' exn) => if eid = eid' then
-                                                                      FLOOKUP s.eshapes eid = SOME (shape_of exn) ∧
-                                                                      is_valid_value s.locals evar exn ∧
-                                                                      hoare (λs'. s' = set_var evar exn (s' with locals := s.locals)) hp Q
-                                                                    else
-                                                                      Q (SOME (Exception eid' exn),empty_locals t)
-                                     | SOME (FinalFFI f)         => Q (SOME (FinalFFI f),empty_locals t)
-                                     | _                         => F)) ⇒
-  refine (HoareC P Q) (PanC (AssignCall (k,v) (SOME (eid,evar,hp)) fname argexps))
+  P ⇛ evaluates_all argexps ∧
+  P ⇛ has_function fname argexps ∧
+  P ⇛ assigncall_handler_contract P fname argexps k v handler Q ⇒
+  (HoareC P Q) refine (PanC (AssignCall (k,v) (SOME handler) fname argexps))
 Proof
   rw[refine_def]
+  >> PairCases_on ‘handler’
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_assigncall]
   >> rw[]
-  >> first_x_assum $ drule_then assume_tac
-  >> qexists ‘THE (OPT_MMAP (eval s) argexps)’
-  >> gvs[optionTheory.option_CLAUSES]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> gvs[optionTheory.IS_SOME_EXISTS]
+  >> PairCases_on ‘x’
+  >> gvs[]
   >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
   >> disj2_tac
-  >> gvs[wp_def] (* TODO REWORK *)
-  >> first_x_assum $ qspec_then ‘dec_clock s with locals := lcls’ assume_tac
+  >> gvs[]
+  >> first_x_assum $ assume_tac o SRULE [cj 2 wp_is_weakest_precondition]
+  >> first_x_assum $ qspec_then ‘dec_clock s with locals := x1’ assume_tac
+  >> gvs[]
+  >> ‘P (dec_clock s with <|locals := s.locals; clock := s.clock|>)’ by (‘dec_clock s with <|locals := s.locals; clock := s.clock|> = s’ suffices_by gvs[]
+                                                                         >> gvs[state_component_equality,dec_clock_def])
+  >> gvs[wp_def]
   >> pairarg_tac
   >> gvs[]
   >> rpt (FULL_CASE_TAC >> gvs[])
-  >> gvs[hoare_def]
   >> first_x_assum $ irule
   >> gvs[set_var_def]
 QED
 
+Definition standalonecall_contract_def[simp]:
+  standalonecall_contract P fname argexps Q s =
+           let (p,lcls) = THE (lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)))
+           in hoare (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
+                    p
+                    (λ(r,t). case r of
+                             | SOME (Return rv)         => Q (NONE,t with locals := s.locals)
+                             | SOME (Exception eid exn) => Q (SOME (Exception eid exn),empty_locals t)
+                             | SOME (FinalFFI f)        => Q (SOME (FinalFFI f),empty_locals t)
+                             | _                        => F)
+End
+        
 Theorem standalonecall_refinement_rule:
-  (∀s. P s ⇒ ∃arg p lcls. IS_SOME (OPT_MMAP (eval s) argexps) ∧
-                          lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)) = SOME (p,lcls) ∧
-                          hoare
-                            (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
-                            p
-                            (λ(r,t). case r of
-                                     | SOME (Return rv)         => Q (NONE,t with locals := s.locals)
-                                     | SOME (Exception eid exn) => Q (SOME (Exception eid exn),empty_locals t)
-                                     | SOME (FinalFFI f)        => Q (SOME (FinalFFI f),empty_locals t)
-                                     | _                        => F)) ⇒
-  refine (HoareC P Q) (PanC (StandAloneCall NONE fname argexps))
+  P ⇛ evaluates_all argexps ∧
+  P ⇛ has_function fname argexps ∧
+  P ⇛ standalonecall_contract P fname argexps Q ⇒
+  (HoareC P Q) refine (PanC (StandAloneCall NONE fname argexps))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_standalonecall]
   >> rw[]
-  >> first_x_assum $ drule_then assume_tac
-  >> qexists ‘THE (OPT_MMAP (eval s) argexps)’
-  >> gvs[optionTheory.option_CLAUSES]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> gvs[optionTheory.IS_SOME_EXISTS]
+  >> PairCases_on ‘x’
+  >> gvs[]
   >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
   >> disj2_tac
-  >> first_x_assum $ irule
   >> gvs[]
+  >> first_x_assum $ irule
+  >> gvs[dec_clock_def]
+  >> ‘s with <|locals := s.locals; clock := s.clock|> = s’ suffices_by gvs[]
+  >> gvs[state_component_equality]
 QED
 
+Definition standalonecall_handler_contract_def[simp]:
+  standalonecall_handler_contract P fname argexps (eid,evar,hp) Q s =
+           let (p,lcls) = THE (lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)))
+           in hoare (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
+                    p
+                    (λ(r,t). case r of
+                             | SOME (Return rv)          => Q (NONE,t with locals := s.locals)
+                             | SOME (Exception eid' exn) => if eid' = eid then
+                                                              FLOOKUP s.eshapes eid = SOME (shape_of exn) ∧
+                                                              is_valid_value s.locals evar exn ∧
+                                                              hoare (λs'. s' = set_var evar exn (s' with locals := s.locals)) hp Q
+                                                            else
+                                                              Q (SOME (Exception eid' exn),empty_locals t)
+                             | SOME (FinalFFI f)         => Q (SOME (FinalFFI f),empty_locals t)
+                             | _                         => F)
+End
+
 Theorem standalonecall_handler_refinement_rule:
-  (∀s. P s ⇒ ∃arg p lcls. IS_SOME (OPT_MMAP (eval s) argexps) ∧
-                          lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)) = SOME (p,lcls) ∧
-                          hoare
-                            (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
-                            p
-                            (λ(r,t). case r of
-                                     | SOME (Return rv)          => Q (NONE,t with locals := s.locals)
-                                     | SOME (Exception eid' exn) => if eid = eid' then
-                                                                      FLOOKUP s.eshapes eid = SOME (shape_of exn) ∧
-                                                                      is_valid_value s.locals evar exn ∧
-                                                                      hoare (λs'. s' = set_var evar exn (s' with locals := s.locals)) hp Q
-                                                                    else
-                                                                      Q (SOME (Exception eid' exn),empty_locals t)
-                                     | SOME (FinalFFI f)         => Q (SOME (FinalFFI f),empty_locals t)
-                                     | _                         => F)) ⇒
-  refine (HoareC P Q) (PanC (StandAloneCall (SOME (eid,evar,hp)) fname argexps))
+  P ⇛ evaluates_all argexps ∧
+  P ⇛ has_function fname argexps ∧
+  P ⇛ standalonecall_handler_contract P fname argexps handler Q ⇒
+  (HoareC P Q) refine (PanC (StandAloneCall (SOME handler) fname argexps))
 Proof
   rw[refine_def]
+  >> PairCases_on ‘handler’
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_standalonecall]
   >> rw[]
-  >> first_x_assum $ drule_then assume_tac
-  >> qexists ‘THE (OPT_MMAP (eval s) argexps)’
-  >> gvs[optionTheory.option_CLAUSES]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> gvs[optionTheory.IS_SOME_EXISTS]
+  >> PairCases_on ‘x’
+  >> gvs[]
   >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
   >> disj2_tac
-  >> gvs[wp_def] (* TODO REWORK *)
-  >> first_x_assum $ qspec_then ‘dec_clock s with locals := lcls’ assume_tac
+  >> gvs[]
+  >> first_x_assum $ assume_tac o SRULE [cj 2 wp_is_weakest_precondition]
+  >> first_x_assum $ qspec_then ‘dec_clock s with locals := x1’ assume_tac
+  >> gvs[]
+  >> ‘P (dec_clock s with <|locals := s.locals; clock := s.clock|>)’ by (‘dec_clock s with <|locals := s.locals; clock := s.clock|> = s’ suffices_by gvs[]
+                                                                         >> gvs[state_component_equality,dec_clock_def])
+  >> gvs[wp_def]
   >> pairarg_tac
   >> gvs[]
   >> rpt (FULL_CASE_TAC >> gvs[])
-  >> gvs[hoare_def]
   >> first_x_assum $ irule
   >> gvs[set_var_def]
 QED
 
 Theorem deccall_refinement_rule_pan:
-  refine (DecCallC v s f e (PanC p)) (PanC (DecCall v s f e p))
+  (DecCallC v s f e (PanC p)) refine (PanC (DecCall v s f e p))
 Proof
   rw[refine_def]
 QED
 
-Theorem deccall_refinement_rule:
+Definition deccall_contract_def[simp]:
+  deccall_contract P f e v sh P' Q s = 
+           let (p,lcls) = THE (lookup_code s.code f (THE (OPT_MMAP (eval s) e)))
+           in hoare (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
+                    p
+                    (λ(r,t). case r of
+                             | SOME (Return rv)         => shape_of rv = sh ∧ P' (set_var v rv (t with locals := s.locals))
+                             | SOME (Exception eid exn) => Q (SOME (Exception eid exn),empty_locals t)
+                             | SOME (FinalFFI f)        => Q (SOME (FinalFFI f),empty_locals t)
+                             | _                        => F)
+End
+
+Theorem deccall_refinement_rule_varfree:
   varfree_q v Q ∧
-  (∀s. P s ⇒ ∃p lcls. IS_SOME (OPT_MMAP (eval s) e) ∧
-                          lookup_code s.code f (THE (OPT_MMAP (eval s) e)) = SOME (p,lcls) ∧
-                          hoare
-                            (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
-                            p
-                            (λ(r,t). case r of
-                                     | SOME (Return rv)         => shape_of rv = sh ∧ P' (set_var v rv (t with locals := s.locals))
-                                     | SOME (Exception eid exn) => Q (SOME (Exception eid exn),empty_locals t)
-                                     | SOME (FinalFFI f)        => Q (SOME (FinalFFI f),empty_locals t)
-                                     | _                        => F)) ⇒
-  refine (HoareC P Q) (DecCallC v sh f e (HoareC P' Q))
+  P ⇛ evaluates_all argexps ∧
+  P ⇛ has_function fname argexps ∧
+  P ⇛ deccall_contract P fname argexps v sh P' Q ⇒
+  (HoareC P Q) refine (DecCallC v sh fname argexps (HoareC P' Q))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_deccall]
   >> rw[]
-  >> first_x_assum $ drule_then assume_tac
-  >> qexists ‘THE (OPT_MMAP (eval s) e)’
-  >> gvs[optionTheory.option_CLAUSES]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> gvs[optionTheory.IS_SOME_EXISTS]
+  >> PairCases_on ‘x’
+  >> gvs[]
   >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
   >> disj2_tac
-  >> gvs[wp_def] (* TODO REWORK *)
-  >> first_x_assum $ qspec_then ‘dec_clock s with locals := lcls’ assume_tac
+  >> gvs[]
+  >> first_x_assum $ qspec_then ‘dec_clock s with locals := x1’ assume_tac
+  >> gvs[]
+  >> ‘P (dec_clock s with <|locals := s.locals; clock := s.clock|>)’ by (‘dec_clock s with <|locals := s.locals; clock := s.clock|> = s’ suffices_by gvs[]
+                                                                         >> gvs[state_component_equality,dec_clock_def])
+  >> gvs[wp_def]
   >> pairarg_tac
   >> gvs[]
-  >> Cases_on ‘r’
-  >> gvs[]
-  >> Cases_on ‘x’
-  >> gvs[]
-  >> pairarg_tac
+  >> rpt (FULL_CASE_TAC >> gvs[])
   >> gvs[reset_subst_def,hoare_def]
-  >> first_x_assum $ drule_then assume_tac
+  >> first_x_assum $ dxrule_then assume_tac
   >> pairarg_tac
   >> gvs[]
   >> Cases_on ‘FLOOKUP s.locals v’
   >> gvs[res_var_def,varfree_q_def]
 QED
 
+Definition array_in_memaddrs[simp]:
+  array_in_memaddrs ptr len s ⇔ ∀k. all_words (the_eval_vw ptr s) (w2n (the_eval_vw len s)) k ⇒
+                                    byte_align k ∈ s.memaddrs 
+End
+
+Definition extcall_ffi_contract[simp]:
+  extcall_ffi_contract ffi_index cnfptr cnflen inptr inlen Q s =
+                    hoareFFI s
+                    (ExtCall (explode ffi_index))
+                    (THE (read_bytearray (the_eval_vw cnfptr s) (w2n (the_eval_vw cnflen s)) (mem_load_byte s.memory s.memaddrs s.be)))
+                    (THE (read_bytearray (the_eval_vw inptr s)  (w2n (the_eval_vw inlen s))  (mem_load_byte s.memory s.memaddrs s.be)))
+                    (λt output. Q (NONE, s with <|memory := write_bytearray (the_eval_vw inptr s) output s.memory s.memaddrs s.be; ffi := t|>))
+                    (λoutcome. Q (SOME (FinalFFI outcome),empty_locals s))
+End
+
 Theorem extcall_refinement_rule:
-  (∀s. P s ⇒ PF s.ffi) ∧
-  (∀s. P s ⇒ ∃cpw clw ipw ilw. evaluates_to cnfptr (ValWord cpw) s ∧
-                               evaluates_to cnflen (ValWord clw) s ∧
-                               evaluates_to inptr (ValWord ipw) s ∧
-                               evaluates_to inlen (ValWord ilw) s ∧
-                               (∀k. all_words cpw (w2n clw) k ⇒ s.memaddrs (byte_align k)) ∧
-                               (∀k. all_words ipw (w2n ilw) k ⇒ s.memaddrs (byte_align k)) ∧
-                               hoareFFI PF
-                                        (ExtCall (explode ffi_index))
-                                        (@x. read_bytearray cpw (w2n clw)
-                                                            (mem_load_byte s.memory s.memaddrs s.be) = SOME x)
-                                        (@x. read_bytearray ipw (w2n ilw)
-                                                            (mem_load_byte s.memory s.memaddrs s.be) = SOME x)
-                                        (λt output. Q (NONE, s with
-                                           <|memory := write_bytearray ipw output s.memory s.memaddrs s.be;
-                                             ffi := t|>))
-                                        (λoutcome. Q (SOME (FinalFFI outcome),empty_locals s))) ⇒
-  refine (HoareC P Q) (PanC (ExtCall ffi_index cnfptr cnflen inptr inlen))
+  P ⇛ evaluates_to_word cnfptr ∧
+  P ⇛ evaluates_to_word cnflen ∧
+  P ⇛ evaluates_to_word inptr ∧
+  P ⇛ evaluates_to_word inlen ∧
+  P ⇛ array_in_memaddrs cnfptr cnflen ∧
+  P ⇛ array_in_memaddrs inptr inlen ∧
+  P ⇛ extcall_ffi_contract ffi_index cnfptr cnflen inptr inlen Q ⇒
+  (HoareC P Q) refine (PanC (ExtCall ffi_index cnfptr cnflen inptr inlen))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
-  >> gvs[wp_extcall]
+  >> gvs[wp_extcall,evaluates_to_word_def,evaluates_to_def]
   >> rw[]
-  >> first_x_assum $ drule_then assume_tac
-  >> gvs[]
-  >> qexistsl [‘cpw’, ‘clw’, ‘ipw’, ‘ilw’]
-  >> gvs[]
-  >> irule ((iffLR o cj 2) wpFFI_is_weakest_precondition)
-  >> first_x_assum $ drule_then assume_tac
-  >> HINT_EXISTS_TAC
-  >> gvs[]
+  >> rpt (first_x_assum $ drule_then assume_tac)
+  >> gvs[the_eval_vw_def,the_eval_def]
 QED
+

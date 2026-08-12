@@ -1,18 +1,19 @@
 signature panRefinementLib =
 sig
-    include Abbrev
 
-    val fun_contract_ss               : simpLib.simpset
+  include Abbrev 
 
-    val pan_refinement_ss             : simpLib.simpset
+  val parse                : 'a quotation -> term
+  val begin_refinement_tac : thm -> tactic
 
-    val pan_refinement_tac            : thm -> tactic
-    val pan_refinement_tac_blast      : thm -> tactic
-    val pan_refinement_tac_z3         : thm -> tactic
-    val pan_refinement_tac_z3o        : thm -> tactic
+  val apply_dec            : tactic
+  val apply_assign         : tactic
+  val apply_seq            : term quotation -> tactic
+  val apply_if             : tactic
 
-    val pan_refinement_thms_tac       : thm -> thm list -> tactic
-    val pan_refinement_thms_tac_blast : thm -> thm list -> tactic
-    val pan_refinement_thms_tac_z3    : thm -> thm list -> tactic
-    val pan_refinement_thms_tac_z3o   : thm -> thm list -> tactic
+  val apply_return         : tactic
+
+  val apply_shmemload      : thm -> tactic
+  val apply_shmemstore     : thm -> tactic
+
 end

@@ -9,34 +9,34 @@ Libs BasicProvers
 
 Definition hoare_def:
   hoare P prog Q ⇔ ∀s. P s ⇒ let (r,t) = evaluate (prog,s)
-                             in r ≠ SOME Error ∧ Q (r,t) ∨ r = SOME TimeOut
+                             in r ≠ SOME TimeOut ⇒ r ≠ SOME Error ∧ Q (r,t)
 End
 
 Theorem hoare_monotonic_p:
-  ∀P P' prog Q. (∀s. P s ⇔ P' s) ⇒ (hoare P prog Q ⇔ hoare P' prog Q)
+  ∀P P' prog Q. P' ⇛ P ⇒ (hoare P prog Q ⇒ hoare P' prog Q)
 Proof
   rw[hoare_def]
 QED
 
 Definition hoareFFI_def:
-  hoareFFI P caltyp conf input Q R ⇔ ∀s. P s ⇒ case (call_FFI s caltyp conf input) of
-                                               | FFI_return t output => Q t output
-                                               | FFI_final outcome   => R outcome
+  hoareFFI s caltyp conf input Q R ⇔ case (call_FFI s.ffi caltyp conf input) of
+                                           | FFI_return t output => Q t output
+                                           | FFI_final outcome   => R outcome
 End
 
 Definition wp_def:
   wp prog Q s ⇔ let (r,t) = evaluate (prog,s)
-                    in r ≠ SOME Error ∧ Q (r,t) ∨ r = SOME TimeOut
+                in r ≠ SOME TimeOut ⇒ r ≠ SOME Error ∧ Q (r,t)
 End
 
 Theorem wp_is_weakest_precondition:
-  ∀P prog Q. hoare (wp prog Q) prog Q ∧ (hoare P prog Q ⇔ (∀s. P s ⇒ wp prog Q s))
+  ∀P prog Q. hoare (wp prog Q) prog Q ∧ (hoare P prog Q ⇔ (P ⇛ wp prog Q))
 Proof
   rw[hoare_def,wp_def]
 QED
 
 Theorem wp_monotonic:
-  ∀A B prog. (∀s. A s ⇒ B s) ⇒ (∀s. wp prog A s ⇒ wp prog B s)
+  ∀A B prog. (A ⇛ B) ⇒ (wp prog A ⇛ wp prog B)
 Proof
   rw[wp_def,hoare_def]
   >> pairarg_tac
@@ -76,21 +76,8 @@ Proof
   >> gvs[]
 QED
 
-Definition wpFFI_def:
-  wpFFI caltyp conf input Q R s ⇔ case (call_FFI s caltyp conf input) of
-                                  | FFI_return t output => Q t output
-                                  | FFI_final outcome   => R outcome
-End
-
-Theorem wpFFI_is_weakest_precondition:
-  ∀P caltyp conf input Q R. hoareFFI (wpFFI caltyp conf input Q R) caltyp conf input Q R ∧
-                            (hoareFFI P caltyp conf input Q R ⇔ (∀s. P s ⇒ wpFFI caltyp conf input Q R s))
-Proof
-  rw[hoareFFI_def,wpFFI_def]
-QED
-
 Theorem wp_skip:
-  wp Skip Q s ⇔ Q (NONE, s)
+  wp Skip Q s ⇔ CURRY Q NONE s
 Proof
   rw[wp_def,evaluate_def]
 QED
@@ -110,11 +97,12 @@ Proof
 QED
 
 Theorem wp_assign:
-  wp (Assign k v src) Q s ⇔ valid_value k v src s ∧
-                            subst k v src (λs. Q (NONE, s)) s
+  wp (Assign k v src) Q s ⇔ evaluates src s ∧
+                            valid_value k v src s ∧
+                            subst k v src (CURRY Q NONE) s
 Proof
   Cases_on ‘k’
-  >> rw[wp_def,evaluate_def,valid_value_def,subst_def]
+  >> rw[wp_def,evaluate_def,valid_value_def,subst_def,evaluates_def]
   >> iff_tac
   >> rw[]
   >> pairarg_tac
@@ -122,12 +110,13 @@ Proof
 QED
 
 Theorem wp_store:
-  wp (Store dest src) Q s ⇔ ∃addr val. evaluates_to dest (ValWord addr) s ∧
-                                       evaluates_to src val s ∧
-                                       addr_in_mem addr val s ∧
-                                       mem_subst addr val (λs. Q (NONE, s)) s
+  wp (Store dest src) Q s ⇔ evaluates_to_word dest s ∧
+                            evaluates src s ∧
+                            addr_in_mem (the_eval_vw dest) (the_eval src) s ∧
+                            mem_subst (the_eval_vw dest) (the_eval src) (CURRY Q NONE) s
 Proof
-  rw[wp_def,evaluate_def,evaluates_to_def,addr_in_mem_def,mem_subst_def]
+  rw[wp_def,evaluate_def,evaluates_def,evaluates_to_word_def,addr_in_mem_def,mem_subst_def,
+     the_eval_def,the_eval_vw_def]
   >> iff_tac
   >> rw[]
   >> pairarg_tac
@@ -135,29 +124,29 @@ Proof
 QED
 
 Theorem wp_store32:
-  wp (Store32 dest src) Q s ⇔ ∃addr val. evaluates_to dest (ValWord addr) s ∧
-                                         evaluates_to src (ValWord val) s ∧
-                                         addr_in_mem_32 addr val s ∧
-                                         mem_subst_32 addr val (λs. Q (NONE, s)) s
+  wp (Store32 dest src) Q s ⇔ evaluates_to_word dest s ∧
+                              evaluates_to_word src s ∧
+                              addr_in_mem32 (the_eval_vw dest) s ∧
+                              mem_subst32 (the_eval_vw dest) (the_eval_vw src) (CURRY Q NONE) s
 Proof
-  rw[wp_def,evaluate_def,evaluates_to_def,addr_in_mem_32_def,mem_subst_32_def]
+  rw[wp_def,evaluate_def,evaluates_to_word_def,addr_in_mem32_def,mem_subst32_def]
   >> iff_tac
   >> rw[]
   >> pairarg_tac
-  >> gvs[AllCaseEqs()]
+  >> gvs[AllCaseEqs(),the_eval_vw_def,the_eval_def,mem_store_32_def,IN_DEF]
 QED
 
 Theorem wp_storebyte:
-  wp (StoreByte dest src) Q s ⇔ ∃addr val. evaluates_to dest (ValWord addr) s ∧
-                                           evaluates_to src (ValWord val) s ∧
-                                           addr_in_mem_byte addr val s ∧
-                                           mem_subst_byte addr val (λs. Q (NONE, s)) s
+  wp (StoreByte dest src) Q s ⇔ evaluates_to_word dest s ∧
+                                evaluates_to_word src s ∧
+                                addr_in_mem8 (the_eval_vw dest) s ∧
+                                mem_subst8 (the_eval_vw dest) (the_eval_vw src) (CURRY Q NONE) s
 Proof
-  rw[wp_def,evaluate_def,evaluates_to_def,addr_in_mem_byte_def,mem_subst_byte_def]
+  rw[wp_def,evaluate_def,evaluates_to_word_def,addr_in_mem8_def,mem_subst8_def]
   >> iff_tac
   >> rw[]
   >> pairarg_tac
-  >> gvs[AllCaseEqs()]
+  >> gvs[AllCaseEqs(),the_eval_vw_def,the_eval_def,mem_store_byte_def,IN_DEF]
 QED
 
 Definition shmemload_post_def[simp]:
@@ -168,17 +157,17 @@ End
 Theorem wp_shmemload:
   wp (ShMemLoad op vk v src) Q s ⇔ (∃w. lookup_kvar s vk v = SOME (ValWord w)) ∧
                                    ∃addr. evaluates_to src (ValWord addr) s ∧
-                                          s.sh_memaddrs (if op = OpW then addr else byte_align addr) ∧
+                                          (if op = OpW then addr else byte_align addr) ∈ s.sh_memaddrs ∧
                                           let (QF,RF) = shmemload_post Q vk v s in
-                                            wpFFI
+                                            hoareFFI
+                                              s
                                               (SharedMem MappedRead)
                                               [n2w (nb_op op)]
                                               (word_to_bytes addr F)
                                               QF
                                               RF
-                                              s.ffi
 Proof
-  rw[wp_def,evaluate_def,evaluates_to_def,sh_mem_load_def,wpFFI_def]
+  rw[wp_def,evaluate_def,evaluates_to_def,sh_mem_load_def,hoareFFI_def]
   >> iff_tac
   >> rw[]
   >> pairarg_tac
@@ -199,9 +188,10 @@ End
 Theorem wp_shmemstore:
   wp (ShMemStore op dest src) Q s ⇔ ∃addr val. evaluates_to dest (ValWord addr) s ∧
                                                evaluates_to src (ValWord val) s ∧
-                                               s.sh_memaddrs (if op = OpW then addr else byte_align addr) ∧
+                                               (if op = OpW then addr else byte_align addr) ∈ s.sh_memaddrs ∧
                                                let (QF,RF) = shmemstore_post Q s in
-                                                 wpFFI
+                                                 hoareFFI
+                                                  s
                                                   (SharedMem MappedWrite)
                                                   [n2w (nb_op op)]
                                                   (if op = OpW then
@@ -210,9 +200,8 @@ Theorem wp_shmemstore:
                                                      (TAKE (nb_op op) (word_to_bytes val F) ++ word_to_bytes addr F))
                                                   QF
                                                   RF
-                                                  s.ffi
 Proof
-  rw[wp_def,evaluate_def,evaluates_to_def,sh_mem_store_def,wpFFI_def]
+  rw[wp_def,evaluate_def,evaluates_to_def,sh_mem_store_def,hoareFFI_def]
   >> iff_tac
   >> rw[]
   >> pairarg_tac
@@ -404,7 +393,7 @@ QED
 
 Definition extcall_post_def[simp]:
   extcall_post Q addr s = ((λt output. Q (NONE, s with <|memory := write_bytearray addr output s.memory s.memaddrs s.be; ffi := t|>)),
-                           (λoutcome.    Q (SOME (FinalFFI outcome),empty_locals s)))
+                           (λoutcome.  Q (SOME (FinalFFI outcome),empty_locals s)))
 End
 
 Theorem wp_extcall:
@@ -412,27 +401,28 @@ Theorem wp_extcall:
                                                                            evaluates_to cnflen (ValWord clw) s ∧
                                                                            evaluates_to inptr  (ValWord ipw) s ∧
                                                                            evaluates_to inlen  (ValWord ilw) s ∧
-                                                                           (∀k. all_words cpw (w2n clw) k ⇒ s.memaddrs (byte_align k)) ∧
-                                                                           (∀k. all_words ipw (w2n ilw) k ⇒ s.memaddrs (byte_align k)) ∧
+                                                                           (∀k. all_words cpw (w2n clw) k ⇒ byte_align k ∈ s.memaddrs) ∧
+                                                                           (∀k. all_words ipw (w2n ilw) k ⇒ byte_align k ∈ s.memaddrs) ∧
                                                                            let (QF,RF) = extcall_post Q ipw s in
-                                                                             wpFFI (ExtCall (explode ffi_index))
-                                                                                   (@x. read_bytearray cpw (w2n clw) (mem_load_byte s.memory s.memaddrs s.be) = SOME x)
-                                                                                   (@x. read_bytearray ipw (w2n ilw) (mem_load_byte s.memory s.memaddrs s.be) = SOME x)
+                                                                             hoareFFI s (ExtCall (explode ffi_index))
+                                                                                   (THE (read_bytearray cpw (w2n clw) (mem_load_byte s.memory s.memaddrs s.be)))
+                                                                                   (THE (read_bytearray ipw (w2n ilw) (mem_load_byte s.memory s.memaddrs s.be)))
                                                                                    QF
                                                                                    RF
-                                                                                   s.ffi
 Proof
-  rw[wp_def,evaluate_def,evaluates_to_def,wpFFI_def]
+  rw[wp_def,evaluate_def,evaluates_to_def,hoareFFI_def]
   >> reverse iff_tac
   >> rw[]
   >> pairarg_tac
   >> gvs[]
-  >- (rpt (qpat_x_assum ‘∀k. _ ⇒ s.memaddrs _’ $ assume_tac o GEN_ALL o REWRITE_RULE [memaddrs_EQ_mem_load_byte_SOME])
+  >- (‘r ≠ SOME Error ∧ Q (r,t) ∨ r = SOME TimeOut’ suffices_by metis_tac[]
+      >> gvs[IN_DEF]
+      >> rpt (qpat_x_assum ‘∀k. _ ⇒ s.memaddrs _’ $ assume_tac o GEN_ALL o REWRITE_RULE [memaddrs_EQ_mem_load_byte_SOME])
       >> rpt (qpat_x_assum ‘∀m be k. _’ $ qspecl_then [‘s.memory’, ‘s.be’] assume_tac)
       >> rpt (qpat_x_assum ‘∀k. _ ⇒ ∃w. _’ $ assume_tac o REWRITE_RULE [mem_SOME_EQ_read_bytearray])
       >> gvs[AllCaseEqs()])
   >> gvs[AllCaseEqs()]
-  >> rw[]
+  >> rw[IN_DEF]
   >> irule (iffRL memaddrs_EQ_mem_load_byte_SOME)
   >> qexistsl [‘s.be’, ‘s.memory’]
   >> irule (iffRL mem_SOME_EQ_read_bytearray)
