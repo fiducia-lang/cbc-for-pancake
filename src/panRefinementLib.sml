@@ -6,7 +6,10 @@ struct
 open HolKernel BasicProvers boolLib bossLib blastLib simpLib HolSmtLib
 open asmTheory pred_setTheory finite_mapTheory wordsTheory
 open wordLangTheory
-open panLangTheory panSemTheory panPropsTheory panPredicateTheory panRefinementTheory
+open panLangTheory panMiscTheory panSemTheory panPropsTheory panPredicateTheory panRefinementTheory
+
+val fun_contract_ss   = srw_ss() && [word_def, word_with_def, the_word_def,
+                                     fun_contract_def, immutable_def];
 
 val pan_refinement_ss = srw_ss() && [varfree_p_def,varfree_q_def,
                                      evaluates_def,

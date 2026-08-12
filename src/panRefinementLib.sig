@@ -2,6 +2,8 @@ signature panRefinementLib =
 sig
     include Abbrev
 
+    val fun_contract_ss               : simpLib.simpset
+
     val pan_refinement_ss             : simpLib.simpset
 
     val pan_refinement_tac            : thm -> tactic

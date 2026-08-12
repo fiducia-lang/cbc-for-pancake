@@ -116,6 +116,15 @@ Proof
   rw[refine_def,hoare_def]
 QED
 
+Theorem both_pre_post_refinement_rule:
+  (∀s. P s ⇒ P' s) ∧ (∀s. Q' s ⇒ Q s) ⇒ refine (HoareC P Q) (HoareC P' Q')
+Proof
+  rw[]
+  >> irule refine_transitive
+  >> qexists ‘HoareC P' Q’
+  >> gvs[strengthen_postcondition_refinement_rule,weaken_precondition_refinement_rule]
+QED
+
 Theorem skip_refinement_rule:
   (∀s. P s ⇒ Q (NONE,s)) ⇒
   refine (HoareC P Q) (PanC Skip)
@@ -454,8 +463,8 @@ Proof
 QED
 
 Theorem tailcall_refinement_rule:
-  (∀s. P s ⇒ ∃arg p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
-                          lookup_code s.code fname args = SOME (p,lcls) ∧
+  (∀s. P s ⇒ ∃arg p lcls. IS_SOME (OPT_MMAP (eval s) argexps) ∧
+                          lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)) = SOME (p,lcls) ∧
                           hoare
                             (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
                             p
@@ -467,7 +476,8 @@ Proof
   >> gvs[wp_tailcall]
   >> rw[]
   >> first_x_assum $ drule_then assume_tac
-  >> gvs[]
+  >> qexists ‘THE (OPT_MMAP (eval s) argexps)’
+  >> gvs[optionTheory.option_CLAUSES]
   >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
   >> disj2_tac
   >> first_x_assum $ irule
@@ -475,8 +485,8 @@ Proof
 QED
 
 Theorem assigncall_refinement_rule:
-  (∀s. P s ⇒ ∃arg p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
-                          lookup_code s.code fname args = SOME (p,lcls) ∧
+  (∀s. P s ⇒ ∃arg p lcls. IS_SOME (OPT_MMAP (eval s) argexps) ∧
+                          lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)) = SOME (p,lcls) ∧
                           hoare
                             (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
                             p
@@ -493,7 +503,8 @@ Proof
   >> gvs[wp_assigncall]
   >> rw[]
   >> first_x_assum $ drule_then assume_tac
-  >> gvs[]
+  >> qexists ‘THE (OPT_MMAP (eval s) argexps)’
+  >> gvs[optionTheory.option_CLAUSES]
   >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
   >> disj2_tac
   >> first_x_assum $ irule
@@ -501,8 +512,8 @@ Proof
 QED
 
 Theorem assigncall_handler_refinement_rule:
-  (∀s. P s ⇒ ∃arg p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
-                          lookup_code s.code fname args = SOME (p,lcls) ∧
+  (∀s. P s ⇒ ∃arg p lcls. IS_SOME (OPT_MMAP (eval s) argexps) ∧
+                          lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)) = SOME (p,lcls) ∧
                           hoare
                             (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
                             p
@@ -524,7 +535,8 @@ Proof
   >> gvs[wp_assigncall]
   >> rw[]
   >> first_x_assum $ drule_then assume_tac
-  >> gvs[]
+  >> qexists ‘THE (OPT_MMAP (eval s) argexps)’
+  >> gvs[optionTheory.option_CLAUSES]
   >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
   >> disj2_tac
   >> gvs[wp_def] (* TODO REWORK *)
@@ -538,8 +550,8 @@ Proof
 QED
 
 Theorem standalonecall_refinement_rule:
-  (∀s. P s ⇒ ∃arg p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
-                          lookup_code s.code fname args = SOME (p,lcls) ∧
+  (∀s. P s ⇒ ∃arg p lcls. IS_SOME (OPT_MMAP (eval s) argexps) ∧
+                          lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)) = SOME (p,lcls) ∧
                           hoare
                             (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
                             p
@@ -555,7 +567,8 @@ Proof
   >> gvs[wp_standalonecall]
   >> rw[]
   >> first_x_assum $ drule_then assume_tac
-  >> gvs[]
+  >> qexists ‘THE (OPT_MMAP (eval s) argexps)’
+  >> gvs[optionTheory.option_CLAUSES]
   >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
   >> disj2_tac
   >> first_x_assum $ irule
@@ -563,8 +576,8 @@ Proof
 QED
 
 Theorem standalonecall_handler_refinement_rule:
-  (∀s. P s ⇒ ∃arg p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
-                          lookup_code s.code fname args = SOME (p,lcls) ∧
+  (∀s. P s ⇒ ∃arg p lcls. IS_SOME (OPT_MMAP (eval s) argexps) ∧
+                          lookup_code s.code fname (THE (OPT_MMAP (eval s) argexps)) = SOME (p,lcls) ∧
                           hoare
                             (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
                             p
@@ -585,7 +598,8 @@ Proof
   >> gvs[wp_standalonecall]
   >> rw[]
   >> first_x_assum $ drule_then assume_tac
-  >> gvs[]
+  >> qexists ‘THE (OPT_MMAP (eval s) argexps)’
+  >> gvs[optionTheory.option_CLAUSES]
   >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
   >> disj2_tac
   >> gvs[wp_def] (* TODO REWORK *)
@@ -606,8 +620,8 @@ QED
 
 Theorem deccall_refinement_rule:
   varfree_q v Q ∧
-  (∀s. P s ⇒ ∃arg p lcls. OPT_MMAP (eval s) e = SOME args ∧
-                          lookup_code s.code f args = SOME (p,lcls) ∧
+  (∀s. P s ⇒ ∃p lcls. IS_SOME (OPT_MMAP (eval s) e) ∧
+                          lookup_code s.code f (THE (OPT_MMAP (eval s) e)) = SOME (p,lcls) ∧
                           hoare
                             (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
                             p
@@ -623,7 +637,8 @@ Proof
   >> gvs[wp_deccall]
   >> rw[]
   >> first_x_assum $ drule_then assume_tac
-  >> gvs[]
+  >> qexists ‘THE (OPT_MMAP (eval s) e)’
+  >> gvs[optionTheory.option_CLAUSES]
   >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
   >> disj2_tac
   >> gvs[wp_def] (* TODO REWORK *)
