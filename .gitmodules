@@ -1,6 +1,6 @@
-[submodule "cakeml"]
-	path = cakeml
-	url = https://github.com/CakeML/cakeml.git
 [submodule "environment/HOL"]
 	path = environment/HOL
 	url = https://github.com/HOL-Theorem-Prover/HOL.git
+[submodule "environment/cakeml"]
+	path = environment/cakeml
+	url = https://github.com/cakeml/cakeml.git
