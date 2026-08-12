@@ -371,6 +371,160 @@ Proof
   >> gvs[wp_continue]
 QED
 
+Theorem pred_upd_simp[simp]:
+  ∀P s. P s ⇒ P (dec_clock s with <|locals := s.locals; clock := s.clock|>) ∧
+              P (s with <|locals := s.locals; clock := s.clock|>)
+Proof
+  rw[dec_clock_def]
+  >> ‘s with <|locals := s.locals; clock := s.clock|> = s’ suffices_by gvs[]
+  >> gvs[state_component_equality]
+QED
+
+Theorem tailcall_refinement_rule:
+  (∀s. P s ⇒ ∃arg p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
+                          lookup_code s.code fname args = SOME (p,lcls) ∧
+                          hoare
+                            (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
+                            p
+                            (λ(r,t). r ≠ SOME Continue ∧ r ≠ SOME Break ∧ r ≠ NONE ∧ Q (r,empty_locals t))) ⇒
+  refine (HoareC P Q) (PanC (TailCall fname argexps))
+Proof
+  rw[refine_def]
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> gvs[wp_tailcall]
+  >> rw[]
+  >> first_x_assum $ drule_then assume_tac
+  >> gvs[]
+  >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
+  >> disj2_tac
+  >> first_x_assum $ irule
+  >> gvs[]
+QED
+
+Theorem assigncall_refinement_rule:
+  (∀s. P s ⇒ ∃arg p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
+                          lookup_code s.code fname args = SOME (p,lcls) ∧
+                          hoare
+                            (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
+                            p
+                            (λ(r,t). case r of
+                                     | SOME (Return rv)         => is_valid_value (case k of Local => s.locals | Global => s.globals) v rv ∧
+                                                                   Q (NONE,set_kvar k v rv (t with locals := s.locals))
+                                     | SOME (Exception eid exn) => Q (SOME (Exception eid exn),empty_locals t)
+                                     | SOME (FinalFFI f)        => Q (SOME (FinalFFI f),empty_locals t)
+                                     | _                        => F)) ⇒
+  refine (HoareC P Q) (PanC (AssignCall (k,v) NONE fname argexps))
+Proof
+  rw[refine_def]
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> gvs[wp_assigncall]
+  >> rw[]
+  >> first_x_assum $ drule_then assume_tac
+  >> gvs[]
+  >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
+  >> disj2_tac
+  >> first_x_assum $ irule
+  >> gvs[]
+QED
+
+Theorem assigncall_handler_refinement_rule:
+  (∀s. P s ⇒ ∃arg p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
+                          lookup_code s.code fname args = SOME (p,lcls) ∧
+                          hoare
+                            (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
+                            p
+                            (λ(r,t). case r of
+                                     | SOME (Return rv)          => is_valid_value (case k of Local => s.locals | Global => s.globals) v rv ∧
+                                                                    Q (NONE,set_kvar k v rv (t with locals := s.locals))
+                                     | SOME (Exception eid' exn) => if eid = eid' then
+                                                                      FLOOKUP s.eshapes eid = SOME (shape_of exn) ∧
+                                                                      is_valid_value s.locals evar exn ∧
+                                                                      hoare (λs'. s' = set_var evar exn (s' with locals := s.locals)) hp Q
+                                                                    else
+                                                                      Q (SOME (Exception eid' exn),empty_locals t)
+                                     | SOME (FinalFFI f)         => Q (SOME (FinalFFI f),empty_locals t)
+                                     | _                         => F)) ⇒
+  refine (HoareC P Q) (PanC (AssignCall (k,v) (SOME (eid,evar,hp)) fname argexps))
+Proof
+  rw[refine_def]
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> gvs[wp_assigncall]
+  >> rw[]
+  >> first_x_assum $ drule_then assume_tac
+  >> gvs[]
+  >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
+  >> disj2_tac
+  >> gvs[wp_def] (* TODO REWORK *)
+  >> first_x_assum $ qspec_then ‘dec_clock s with locals := lcls’ assume_tac
+  >> pairarg_tac
+  >> gvs[]
+  >> rpt (FULL_CASE_TAC >> gvs[])
+  >> gvs[hoare_def]
+  >> first_x_assum $ irule
+  >> gvs[set_var_def]
+QED
+
+Theorem standalonecall_refinement_rule:
+  (∀s. P s ⇒ ∃arg p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
+                          lookup_code s.code fname args = SOME (p,lcls) ∧
+                          hoare
+                            (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
+                            p
+                            (λ(r,t). case r of
+                                     | SOME (Return rv)         => Q (NONE,t with locals := s.locals)
+                                     | SOME (Exception eid exn) => Q (SOME (Exception eid exn),empty_locals t)
+                                     | SOME (FinalFFI f)        => Q (SOME (FinalFFI f),empty_locals t)
+                                     | _                        => F)) ⇒
+  refine (HoareC P Q) (PanC (StandAloneCall NONE fname argexps))
+Proof
+  rw[refine_def]
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> gvs[wp_standalonecall]
+  >> rw[]
+  >> first_x_assum $ drule_then assume_tac
+  >> gvs[]
+  >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
+  >> disj2_tac
+  >> first_x_assum $ irule
+  >> gvs[]
+QED
+
+Theorem standalonecall_handler_refinement_rule:
+  (∀s. P s ⇒ ∃arg p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
+                          lookup_code s.code fname args = SOME (p,lcls) ∧
+                          hoare
+                            (λs'. s'.locals = lcls ∧ P (s' with <|locals := s.locals; clock := s.clock|>))
+                            p
+                            (λ(r,t). case r of
+                                     | SOME (Return rv)          => Q (NONE,t with locals := s.locals)
+                                     | SOME (Exception eid' exn) => if eid = eid' then
+                                                                      FLOOKUP s.eshapes eid = SOME (shape_of exn) ∧
+                                                                      is_valid_value s.locals evar exn ∧
+                                                                      hoare (λs'. s' = set_var evar exn (s' with locals := s.locals)) hp Q
+                                                                    else
+                                                                      Q (SOME (Exception eid' exn),empty_locals t)
+                                     | SOME (FinalFFI f)         => Q (SOME (FinalFFI f),empty_locals t)
+                                     | _                         => F)) ⇒
+  refine (HoareC P Q) (PanC (StandAloneCall (SOME (eid,evar,hp)) fname argexps))
+Proof
+  rw[refine_def]
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> gvs[wp_standalonecall]
+  >> rw[]
+  >> first_x_assum $ drule_then assume_tac
+  >> gvs[]
+  >> dxrule_then assume_tac ((iffLR o cj 2) wp_is_weakest_precondition)
+  >> disj2_tac
+  >> gvs[wp_def] (* TODO REWORK *)
+  >> first_x_assum $ qspec_then ‘dec_clock s with locals := lcls’ assume_tac
+  >> pairarg_tac
+  >> gvs[]
+  >> rpt (FULL_CASE_TAC >> gvs[])
+  >> gvs[hoare_def]
+  >> first_x_assum $ irule
+  >> gvs[set_var_def]
+QED
+
 Theorem raise_refinement_rule:
   (∀s. P s ⇒ ∃sh val. has_eshape eid sh s ∧ evaluates_to e val s ∧ shape_of val = sh ∧
                       size_of_shape (shape_of val) ≤ 32 ∧
