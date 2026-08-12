@@ -226,6 +226,59 @@ Proof
   >> gvs[wp_storebyte]
 QED
 
+Theorem shmemload_refinement_rule:
+  (∀s. P s ⇒ (∃w. lookup_kvar s vk v = SOME (ValWord w))) ∧
+  (∀s. P s ⇒ PF s.ffi) ∧
+  (∀s. P s ⇒ ∃addr. evaluates_to src (ValWord addr) s ∧
+                    s.sh_memaddrs (if op = OpW then addr else byte_align addr) ∧
+                    hoareFFI PF (SharedMem MappedRead) [n2w (nb_op op)] (word_to_bytes addr F)
+                             (λt output.
+                               Q (NONE,set_kvar vk v (ValWord (word_of_bytes F 0w output)) s with ffi := t))
+                             (λoutcome. Q (SOME (FinalFFI outcome),empty_locals s))) ⇒
+  refine (HoareC P Q) (PanC (ShMemLoad op vk v src))
+Proof
+  rw[refine_def]
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> gvs[wp_shmemload]
+  >> rw[]
+  >> first_x_assum $ drule_then assume_tac
+  >> gvs[]
+  >> HINT_EXISTS_TAC
+  >> gvs[]
+  >> irule ((iffLR o cj 2) wpFFI_is_weakest_precondition)
+  >> first_x_assum $ drule_then assume_tac
+  >> HINT_EXISTS_TAC
+  >> gvs[]
+QED
+
+Theorem shmemstore_refinement_rule:
+  (∀s. P s ⇒ PF s.ffi) ∧
+  (∀s. P s ⇒ ∃addr val. evaluates_to dest (ValWord addr) s ∧
+                        evaluates_to src (ValWord val) s ∧
+                        s.sh_memaddrs (if op = OpW then addr else byte_align addr) ∧
+                        hoareFFI PF (SharedMem MappedWrite) [n2w (nb_op op)]
+                                 (if op = OpW then
+                                    word_to_bytes val F ++ word_to_bytes addr F
+                                  else
+                                    (TAKE (nb_op op) (word_to_bytes val F) ++ word_to_bytes addr F))
+                                 (λt output. Q (NONE,s with ffi := t))
+                                 (λoutcome. Q (SOME (FinalFFI outcome),s))) ⇒
+  refine (HoareC P Q) (PanC (ShMemStore op dest src))
+Proof
+  rw[refine_def]
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> gvs[wp_shmemstore]
+  >> rw[]
+  >> first_x_assum $ drule_then assume_tac
+  >> gvs[]
+  >> qexistsl [‘addr’, ‘val’]
+  >> gvs[]
+  >> irule ((iffLR o cj 2) wpFFI_is_weakest_precondition)
+  >> first_x_assum $ drule_then assume_tac
+  >> HINT_EXISTS_TAC
+  >> gvs[]
+QED
+
 Theorem seq_refinement_rule_pan:
   refine (SeqC (PanC l) (PanC r)) (PanC (Seq l r))
 Proof
@@ -378,6 +431,17 @@ Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
   >> gvs[wp_continue]
+QED
+
+Theorem raise_refinement_rule:
+  (∀s. P s ⇒ ∃sh val. has_eshape eid sh s ∧ evaluates_to e val s ∧ shape_of val = sh ∧
+                      size_of_shape (shape_of val) ≤ 32 ∧
+                      Q (SOME (Exception eid val),empty_locals s)) ⇒
+  refine (HoareC P Q) (PanC (Raise eid e))
+Proof
+  rw[refine_def]
+  >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
+  >> gvs[wp_raise]
 QED
 
 Theorem pred_upd_simp[simp]:
@@ -579,13 +643,36 @@ Proof
   >> gvs[res_var_def,varfree_q_def]
 QED
 
-Theorem raise_refinement_rule:
-  (∀s. P s ⇒ ∃sh val. has_eshape eid sh s ∧ evaluates_to e val s ∧ shape_of val = sh ∧
-                      size_of_shape (shape_of val) ≤ 32 ∧
-                      Q (SOME (Exception eid val),empty_locals s)) ⇒
-  refine (HoareC P Q) (PanC (Raise eid e))
+Theorem extcall_refinement_rule:
+  (∀s. P s ⇒ PF s.ffi) ∧
+  (∀s. P s ⇒ ∃cpw clw ipw ilw. evaluates_to cnfptr (ValWord cpw) s ∧
+                               evaluates_to cnflen (ValWord clw) s ∧
+                               evaluates_to inptr (ValWord ipw) s ∧
+                               evaluates_to inlen (ValWord ilw) s ∧
+                               (∀k. all_words cpw (w2n clw) k ⇒ s.memaddrs (byte_align k)) ∧
+                               (∀k. all_words ipw (w2n ilw) k ⇒ s.memaddrs (byte_align k)) ∧
+                               hoareFFI PF
+                                        (ExtCall (explode ffi_index))
+                                        (@x. read_bytearray cpw (w2n clw)
+                                                            (mem_load_byte s.memory s.memaddrs s.be) = SOME x)
+                                        (@x. read_bytearray ipw (w2n ilw)
+                                                            (mem_load_byte s.memory s.memaddrs s.be) = SOME x)
+                                        (λt output. Q (NONE, s with
+                                           <|memory := write_bytearray ipw output s.memory s.memaddrs s.be;
+                                             ffi := t|>))
+                                        (λoutcome. Q (SOME (FinalFFI outcome),empty_locals s))) ⇒
+  refine (HoareC P Q) (PanC (ExtCall ffi_index cnfptr cnflen inptr inlen))
 Proof
   rw[refine_def]
   >> irule ((iffRL o cj 2) wp_is_weakest_precondition)
-  >> gvs[wp_raise]
+  >> gvs[wp_extcall]
+  >> rw[]
+  >> first_x_assum $ drule_then assume_tac
+  >> gvs[]
+  >> qexistsl [‘cpw’, ‘clw’, ‘ipw’, ‘ilw’]
+  >> gvs[]
+  >> irule ((iffLR o cj 2) wpFFI_is_weakest_precondition)
+  >> first_x_assum $ drule_then assume_tac
+  >> HINT_EXISTS_TAC
+  >> gvs[]
 QED
