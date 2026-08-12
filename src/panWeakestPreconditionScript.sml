@@ -450,6 +450,12 @@ Proof
   >> rpt (FULL_CASE_TAC >> gvs[])
 QED
 
+Theorem wp_tick:
+  wp Tick Q s ⇔ s.clock = 0 ∨ Q (NONE,dec_clock s)
+Proof
+  rw[wp_def,evaluate_def]
+QED
+
 Theorem wp_annot:
   wp (Annot a b) Q s ⇔ Q (NONE,s)
 Proof
