@@ -195,6 +195,95 @@ Proof
   >> rpt (FULL_CASE_TAC >> gvs[])
 QED
 
+Theorem wp_tailcall:
+  wp (TailCall fname argexps) Q s ⇔ ∃args p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
+                                                  lookup_code s.code fname args = SOME (p,lcls) ∧
+                                                  (s.clock = 0 ∨
+                                                   wp p (λ(r,t). r ≠ SOME Continue ∧
+                                                                 r ≠ SOME Break ∧
+                                                                 r ≠ NONE ∧
+                                                                 Q(r,empty_locals t))
+                                                        (dec_clock s with locals := lcls))
+Proof
+  rw[wp_def,evaluate_def]
+  >> iff_tac
+  >> rw[]
+  >> rpt (pairarg_tac >> gvs[])
+  >> rpt (FULL_CASE_TAC >> gvs[])
+QED
+ 
+Theorem wp_assigncall:
+  wp (AssignCall (k,v) handler fname argexps) Q s ⇔
+  ∃args p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
+                lookup_code s.code fname args = SOME (p,lcls) ∧
+                (s.clock = 0 ∨
+                 wp p (λ(r,t). case r of
+                               | SOME (Return rv)         => is_valid_value (case k of Local => s.locals | Global => s.globals) v rv ∧
+                                                             Q (NONE,set_kvar k v rv (t with locals := s.locals))
+                               | SOME (Exception eid exn) => (case handler of
+                                                              | NONE                => Q (SOME (Exception eid exn),empty_locals t)
+                                                              | SOME (eid',evar,hp) => if eid = eid' then
+                                                                                         ∃sh. FLOOKUP s.eshapes eid = SOME sh ∧
+                                                                                              shape_of exn = sh ∧
+                                                                                              is_valid_value s.locals evar exn ∧
+                                                                                              wp hp Q (set_var evar exn (t with locals := s.locals))
+                                                                                       else
+                                                                                         Q (SOME (Exception eid exn),empty_locals t))
+                               | SOME (FinalFFI f)        => Q (SOME (FinalFFI f),empty_locals t)
+                               | _ => F) (dec_clock s with locals := lcls))
+Proof
+  rw[wp_def,evaluate_def]
+  >> iff_tac
+  >> rw[]
+  >> rpt (pairarg_tac >> gvs[])
+  >> rpt (FULL_CASE_TAC >> gvs[])
+QED
+
+Theorem wp_standalonecall:
+  wp (StandAloneCall handler fname argexps) Q s ⇔
+  ∃args p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
+                lookup_code s.code fname args = SOME (p,lcls) ∧
+                (s.clock = 0 ∨
+                 wp p (λ(r,t). case r of
+                               | SOME (Return _)          => Q (NONE,t with locals := s.locals)
+                               | SOME (Exception eid exn) => (case handler of
+                                                              | NONE                => Q (SOME (Exception eid exn),empty_locals t)
+                                                              | SOME (eid',evar,hp) => if eid = eid' then
+                                                                                         ∃sh. FLOOKUP s.eshapes eid = SOME sh ∧
+                                                                                              shape_of exn = sh ∧
+                                                                                              is_valid_value s.locals evar exn ∧
+                                                                                              wp hp Q (set_var evar exn (t with locals := s.locals))
+                                                                                       else
+                                                                                         Q (SOME (Exception eid exn),empty_locals t))
+                               | SOME (FinalFFI f)        => Q (SOME (FinalFFI f),empty_locals t)
+                               | _                        => F) (dec_clock s with locals := lcls))
+Proof
+  rw[wp_def,evaluate_def]
+  >> iff_tac
+  >> rw[]
+  >> rpt (pairarg_tac >> gvs[])
+  >> rpt (FULL_CASE_TAC >> gvs[])
+QED
+
+Theorem wp_deccall:
+  wp (DecCall v sh fname argexps p1) Q s ⇔
+  ∃args p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
+                lookup_code s.code fname args = SOME (p,lcls) ∧
+                (s.clock = 0 ∨
+                 wp p (λ(r,t). case r of
+                               | SOME (Return rv)         => shape_of rv = sh ∧ wp p1 (reset_subst v s Q) (set_var v rv (t with locals := s.locals))
+                               | SOME (Exception eid exn) => Q (SOME (Exception eid exn),empty_locals t)
+                               | SOME (FinalFFI f)        => Q (SOME (FinalFFI f),empty_locals t)
+                               | _                        => F) (dec_clock s with locals := lcls))
+Proof
+  rw[wp_def,evaluate_def]
+  >> iff_tac
+  >> rw[]
+  >> rpt (pairarg_tac >> gvs[])
+  >> rpt (FULL_CASE_TAC >> gvs[reset_subst_def])
+  >> rpt (pairarg_tac >> gvs[])
+QED     
+        
 Theorem wp_return:
   wp (Return e) Q s ⇔ ∃val. evaluates_to e val s ∧
                             size_of_shape (shape_of val) ≤ 32 ∧
