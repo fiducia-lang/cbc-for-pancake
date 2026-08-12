@@ -118,8 +118,7 @@ Proof
   >> iff_tac
   >> rw[]
   >> pairarg_tac
-  >> gvs[]
-  >> rpt(FULL_CASE_TAC >> gvs[])
+  >> gvs[AllCaseEqs()]
 QED
 
 Theorem wp_store:
@@ -132,8 +131,7 @@ Proof
   >> iff_tac
   >> rw[]
   >> pairarg_tac
-  >> gvs[]
-  >> rpt (FULL_CASE_TAC >> gvs[])
+  >> gvs[AllCaseEqs()]
 QED
 
 Theorem wp_store32:
@@ -146,8 +144,7 @@ Proof
   >> iff_tac
   >> rw[]
   >> pairarg_tac
-  >> gvs[]
-  >> rpt (FULL_CASE_TAC >> gvs[])
+  >> gvs[AllCaseEqs()]
 QED
 
 Theorem wp_storebyte:
@@ -160,8 +157,7 @@ Proof
   >> iff_tac
   >> rw[]
   >> pairarg_tac
-  >> gvs[]
-  >> rpt (FULL_CASE_TAC >> gvs[])
+  >> gvs[AllCaseEqs()]
 QED
 
 Definition shmemload_post_def[simp]:
@@ -247,7 +243,8 @@ Proof
   >> rw[]
   >> pairarg_tac
   >> gvs[]
-  >> rpt (FULL_CASE_TAC >> gvs[])
+  >> every_case_tac
+  >> gvs[]
 QED
 
 Theorem wp_break:
@@ -273,7 +270,7 @@ Proof
   >> iff_tac
   >> rw[]
   >> rpt (pairarg_tac >> gvs[])
-  >> rpt (FULL_CASE_TAC >> gvs[])
+  >> gvs[AllCaseEqs()]
 QED
 
 Theorem wp_tailcall:
@@ -290,9 +287,9 @@ Proof
   >> iff_tac
   >> rw[]
   >> rpt (pairarg_tac >> gvs[])
-  >> rpt (FULL_CASE_TAC >> gvs[])
+  >> gvs[AllCaseEqs()]
 QED
- 
+
 Theorem wp_assigncall:
   wp (AssignCall (k,v) handler fname argexps) Q s ⇔
   ∃args p lcls. OPT_MMAP (eval s) argexps = SOME args ∧
@@ -317,7 +314,9 @@ Proof
   >> iff_tac
   >> rw[]
   >> rpt (pairarg_tac >> gvs[])
-  >> rpt (FULL_CASE_TAC >> gvs[])
+  >> gvs[AllCaseEqs()]
+  >> FULL_CASE_TAC
+  >> gvs[]
 QED
 
 Theorem wp_standalonecall:
@@ -343,7 +342,9 @@ Proof
   >> iff_tac
   >> rw[]
   >> rpt (pairarg_tac >> gvs[])
-  >> rpt (FULL_CASE_TAC >> gvs[])
+  >> gvs[AllCaseEqs()]
+  >> FULL_CASE_TAC
+  >> gvs[]
 QED
 
 Theorem wp_deccall:
@@ -361,10 +362,11 @@ Proof
   >> iff_tac
   >> rw[]
   >> rpt (pairarg_tac >> gvs[])
-  >> rpt (FULL_CASE_TAC >> gvs[reset_subst_def])
-  >> rpt (pairarg_tac >> gvs[])
-QED     
-        
+  >> gvs[AllCaseEqs(),reset_subst_def]
+  >> pairarg_tac
+  >> gvs[]
+QED
+
 Theorem mem_SOME_EQ_read_bytearray:
   ∀p n m. (∀k. all_words p n k ⇒ ∃w. m k = SOME w) ⇔ ∃ba. read_bytearray p n m = SOME ba
 Proof
@@ -447,7 +449,7 @@ Proof
   >> iff_tac
   >> rw[]
   >> rpt (pairarg_tac >> gvs[])
-  >> rpt (FULL_CASE_TAC >> gvs[])
+  >> gvs[AllCaseEqs()]
 QED
 
 Theorem wp_tick:
